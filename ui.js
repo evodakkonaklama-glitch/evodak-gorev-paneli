@@ -1,5 +1,5 @@
 // Ortak arayüz yardımcıları: öğe oluşturma, simgeler, bildirim balonu, onay penceresi
-import { t } from '../i18n.js';
+import { t } from './i18n.js';
 
 // h('div', { class: 'x', onclick: fn }, 'metin', çocukÖğe, [liste])
 export function h(tag, attrs = {}, ...children) {

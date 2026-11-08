@@ -1,9 +1,9 @@
 // Görevler – 1. aşama: arama ve filtreli basit liste (telefonda kart). Düzenleme 3. aşamada.
-import { h, clear, icon, spinner } from '../ui.js';
-import { t, getLang } from '../../i18n.js';
-import { supabase, fetchAll, friendlyError } from '../supabase.js';
-import { label, searchFold } from '../excel-format.js';
-import { fmtDate, fmtTime, fmtDateTime, dueInfo } from '../dates.js';
+import { h, clear, icon, spinner } from './ui.js';
+import { t, getLang } from './i18n.js';
+import { supabase, fetchAll, friendlyError } from './supabase.js';
+import { label, searchFold } from './excel-format.js';
+import { fmtDate, fmtTime, fmtDateTime, dueInfo } from './dates.js';
 
 const STATUS_ICON = { todo: 'circle', in_progress: 'play', waiting: 'pause', blocked: 'block', done: 'check', cancelled: 'x' };
 const PRIORITY_ICON = { urgent: 'alert', high: 'arrowUp', medium: 'minus', low: 'arrowDown' };

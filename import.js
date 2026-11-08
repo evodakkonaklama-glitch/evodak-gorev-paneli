@@ -1,9 +1,9 @@
 // Excel içe aktarma: dosya seç → önizleme → onay → kaydet → (isterseniz) geri al
-import { h, clear, icon, spinner, toast, confirmDialog } from '../ui.js';
-import { t } from '../../i18n.js';
-import { supabase, fetchAll, friendlyError } from '../supabase.js';
-import { parseWorkbook, diffWithExisting, buildPayload, norm } from '../excel-format.js';
-import { fmtDateTime } from '../dates.js';
+import { h, clear, icon, spinner, toast, confirmDialog } from './ui.js';
+import { t } from './i18n.js';
+import { supabase, fetchAll, friendlyError } from './supabase.js';
+import { parseWorkbook, diffWithExisting, buildPayload, norm } from './excel-format.js';
+import { fmtDateTime } from './dates.js';
 
 const MAX_FILE = 10 * 1024 * 1024;
 const LIST_LIMIT = 100;

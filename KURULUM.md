@@ -18,7 +18,7 @@ Toplam süre yaklaşık 20 dakika. Adımları sırayla yapın.
 1. https://supabase.com/dashboard adresine girin, **evodak-gorev** projesini açın.
 2. Sol menüde **SQL Editor** simgesine tıklayın.
 3. Üstteki **+** (veya **New query**) düğmesine basın; boş bir sorgu sayfası açılır.
-4. Bilgisayarınızda `supabase/migrations/001_schema.sql` dosyasını Not Defteri ile açın. Tümünü seçip (Ctrl+A) kopyalayın (Ctrl+C).
+4. Bilgisayarınızda `001_schema.sql` dosyasını Not Defteri ile açın. Tümünü seçip (Ctrl+A) kopyalayın (Ctrl+C).
 5. Supabase'deki boş sayfaya yapıştırın (Ctrl+V). Sağ alttaki yeşil **Run** düğmesine basın.
    - "Potential issue detected" gibi bir uyarı penceresi çıkarsa **Run this query** deyin.
    - Altta **Success. No rows returned** yazmalı.
@@ -66,8 +66,7 @@ Hesaplar e-postalarından profillere kendiliğinden bağlanır, ek bir işlem ge
 1. Size verdiğim zip dosyasını bilgisayarınızda açın (sağ tık → **Tümünü ayıkla**).
 2. https://github.com adresinde **evodak-gorev-paneli** deposunu açın.
 3. **Add file** → **Upload files**.
-4. Ayıkladığınız klasörün **içindekileri** sürükleyip sayfaya bırakın: `index.html`, `config.js`, `js` klasörü, `supabase` klasörü vb. Klasörün kendisini değil, içindekileri bırakın.
-   - Klasörlerin de yüklenmesi için Chrome veya Edge kullanın ve sürükle-bırak yapın. "choose your files" penceresi klasör yüklemez.
+4. Ayıkladığınız klasörü açın, içindeki **tüm dosyaları** (Ctrl+A) seçip sayfaya sürükleyin. Panelde alt klasör yoktur; bütün dosyalar deponun ana dizininde durur. Aynı adlı eski dosyaların üzerine yazılır, bu normaldir.
 5. Alttaki **Commit changes** düğmesine basın.
 
 ### G. GitHub: config.js'i doldurun

@@ -1,9 +1,9 @@
 // Ayarlar – 1. aşama: profil, dil, şifre değiştirme, Excel içe aktarma bağlantısı, çıkış
-import { h, icon, toast } from '../ui.js';
-import { t, getLang } from '../../i18n.js';
-import { label } from '../excel-format.js';
-import { supabase, friendlyError } from '../supabase.js';
-import { switchLang, logout } from '../main.js';
+import { h, icon, toast } from './ui.js';
+import { t, getLang } from './i18n.js';
+import { label } from './excel-format.js';
+import { supabase, friendlyError } from './supabase.js';
+import { switchLang, logout } from './main.js';
 
 function passwordCard() {
   const msg = h('p', { class: 'form-msg', role: 'alert' });

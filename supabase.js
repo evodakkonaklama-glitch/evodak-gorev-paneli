@@ -1,18 +1,24 @@
 // Supabase istemcisi, yapılandırma kontrolü ve hata mesajları
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/+esm';
-import { CONFIG } from '../config.js';
-import { t } from '../i18n.js';
+import { CONFIG } from './config.js';
+import { t } from './i18n.js';
+
+// Adresin sonuna yanlışlıkla eklenen /rest/v1/ gibi kısımları atar: https://xxxx.supabase.co
+function baseUrl() {
+  const m = String(CONFIG.SUPABASE_URL || '').trim().match(/^https:\/\/[a-z0-9-]+\.supabase\.co/i);
+  return m ? m[0] : '';
+}
 
 // 'missing' | 'invalid' | null
 export function configProblem() {
-  const url = (CONFIG.SUPABASE_URL || '').trim();
-  const key = (CONFIG.SUPABASE_ANON_KEY || '').trim();
+  const url = String(CONFIG.SUPABASE_URL || '').trim();
+  const key = String(CONFIG.SUPABASE_ANON_KEY || '').trim();
   if (!url || !key) return 'missing';
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(url)) return 'invalid';
+  if (!baseUrl()) return 'invalid';
   return null;
 }
 
-export const supabase = configProblem() ? null : createClient(CONFIG.SUPABASE_URL.trim().replace(/\/$/, ''), CONFIG.SUPABASE_ANON_KEY.trim(), {
+export const supabase = configProblem() ? null : createClient(baseUrl(), String(CONFIG.SUPABASE_ANON_KEY).trim(), {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'evodak.auth' },
 });
 

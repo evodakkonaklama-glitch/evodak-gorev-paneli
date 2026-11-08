@@ -1,5 +1,5 @@
 // Tarih yardımcıları – tüm hesaplar Europe/Istanbul saatine göre
-import { t } from '../i18n.js';
+import { t } from './i18n.js';
 
 export const TZ = 'Europe/Istanbul';
 const pad = (n) => String(n).padStart(2, '0');

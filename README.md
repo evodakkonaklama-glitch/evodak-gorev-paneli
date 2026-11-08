@@ -21,8 +21,8 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 
 ## Klasörler
 
-```
-index.html, styles.css, config.js, i18n.js, xlsx.full.min.js
-js/            main.js, supabase.js, ui.js, dates.js, excel-format.js, views/
-supabase/      migrations/*.sql (SQL Editor'de sırayla çalıştırılır)
-```
+Tüm dosyalar deponun ana dizinindedir (GitHub'a sürükle-bırak ile kolay yükleme için alt klasör yoktur).
+
+- Arayüz: index.html, styles.css, config.js, i18n.js, xlsx.full.min.js
+- Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, import.js, settings.js
+- Veritabanı: 001_schema.sql, 002_import.sql, 003_seed.sql (Supabase SQL Editor'de sırayla çalıştırılır)

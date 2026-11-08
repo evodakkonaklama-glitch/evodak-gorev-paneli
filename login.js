@@ -1,7 +1,7 @@
 // Giriş, şifremi unuttum, yeni şifre ve "yapılandırma eksik" ekranları
-import { h, clear, icon, toast } from '../ui.js';
-import { t } from '../../i18n.js';
-import { supabase, friendlyError } from '../supabase.js';
+import { h, clear, icon, toast } from './ui.js';
+import { t } from './i18n.js';
+import { supabase, friendlyError } from './supabase.js';
 
 function shell(...content) {
   return h('div', { class: 'auth-wrap' },

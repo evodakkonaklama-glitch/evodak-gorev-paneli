@@ -1,11 +1,11 @@
 // Uygulama girişi: oturum, yönlendirme (#/...), üst bar
 import { supabase, configProblem, loadMyProfile, friendlyError } from './supabase.js';
-import { t, getLang, setLang, onLangChange } from '../i18n.js';
+import { t, getLang, setLang, onLangChange } from './i18n.js';
 import { h, clear, icon, spinner, errorState, toast } from './ui.js';
-import { renderLogin, renderNewPassword, renderConfigMissing } from './views/login.js';
-import * as tasksView from './views/tasks.js';
-import * as importView from './views/import.js';
-import * as settingsView from './views/settings.js';
+import { renderLogin, renderNewPassword, renderConfigMissing } from './login.js';
+import * as tasksView from './tasks.js';
+import * as importView from './import.js';
+import * as settingsView from './settings.js';
 
 const main = document.getElementById('main');
 const topbar = document.getElementById('topbar');
