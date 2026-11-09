@@ -1,4 +1,4 @@
-// Uygulama girişi: oturum, yönlendirme (#/...), üst bar
+// Uygulama girişi: oturum, yönlendirme (#/...), üst bar, bildirim kurulumu
 import { supabase, configProblem, loadMyProfile, friendlyError } from './supabase.js';
 import { t, getLang, setLang, onLangChange } from './i18n.js';
 import { h, clear, icon, spinner, errorState, toast } from './ui.js';
@@ -6,11 +6,13 @@ import { renderLogin, renderNewPassword, renderConfigMissing } from './login.js'
 import * as tasksView from './tasks.js';
 import * as importView from './import.js';
 import * as settingsView from './settings.js';
+import { registerServiceWorker, syncSubscription } from './push.js';
+import { bellButton, maybeShowPushPrompt, stopInboxChannel } from './notify-ui.js';
 
 const main = document.getElementById('main');
 const topbar = document.getElementById('topbar');
 
-export const app = { session: null, profile: null, isAdmin: false };
+export const app = { session: null, profile: null, isAdmin: false, openTaskId: null };
 
 const ROUTES = {
   '/gorevler': { view: tasksView, nav: 'nav.tasks', icon: 'list' },
@@ -21,10 +23,14 @@ const DEFAULT_ROUTE = '/gorevler';
 
 let cleanup = null;
 let started = false;
+let bell = null;
 
-function currentPath() {
+// '#/gorev/<id>' -> görevler sayfası, ilgili görev açık
+function parseRoute() {
   const p = location.hash.replace(/^#/, '').split('?')[0];
-  return ROUTES[p] ? p : DEFAULT_ROUTE;
+  const m = p.match(/^\/gorev\/([0-9a-f-]{36})$/i);
+  if (m) return { path: '/gorevler', taskId: m[1] };
+  return { path: ROUTES[p] ? p : DEFAULT_ROUTE, taskId: null };
 }
 
 export function navigate(path) {
@@ -33,10 +39,12 @@ export function navigate(path) {
 
 async function route() {
   if (!app.profile) return;
-  const path = currentPath();
+  const { path, taskId } = parseRoute();
   const def = ROUTES[path];
+  if (def.admin && !app.isAdmin) { navigate(DEFAULT_ROUTE); return; }
   if (typeof cleanup === 'function') cleanup();
   cleanup = null;
+  app.openTaskId = taskId;
   renderTopbar(path);
   clear(main);
   try {
@@ -64,11 +72,13 @@ function renderTopbar(activePath) {
 
   const logoutBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('nav.logout'), title: t('nav.logout'), onclick: logout }, icon('logout'));
 
+  if (!bell) bell = bellButton(app, navigate);
+
   clear(topbar).append(
     h('a', { class: 'brand', href: `#${DEFAULT_ROUTE}` }, h('span', { class: 'logo-mark' }, 'E'), h('span', { class: 'brand-text' }, t('app.name'))),
     h('nav', { class: 'nav', 'aria-label': t('app.name') }, links),
     h('div', { class: 'topbar-right' },
-      h('span', { class: 'user-name' }, app.profile.full_name), langBtn, logoutBtn));
+      h('span', { class: 'user-name' }, app.profile.full_name), bell.el, langBtn, logoutBtn));
 }
 
 export async function switchLang(lang) {
@@ -108,11 +118,15 @@ async function startApp(session) {
   if (/access_token|type=|error/.test(location.hash) || location.search.includes('code=')) {
     history.replaceState(null, '', `${location.pathname}#${DEFAULT_ROUTE}`);
   }
-  route();
+  await route();
+  syncSubscription();
+  setTimeout(maybeShowPushPrompt, 600);
 }
 
 function showLogin(message) {
   app.session = null; app.profile = null; app.isAdmin = false;
+  if (bell) { bell.destroy(); bell = null; }
+  stopInboxChannel();
   topbar.hidden = true;
   clear(topbar);
   if (typeof cleanup === 'function') cleanup();
@@ -129,22 +143,42 @@ function hashErrorMessage() {
   return { text: code === 'otp_expired' ? t('auth.link_expired') : (params.get('error_description') || code), type: 'error' };
 }
 
+// Service worker'dan gelen mesajlar: bildirime dokunuldu / bildirim düğmesiyle görev değişti
+function listenServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const msg = e.data || {};
+    if (msg.type === 'open' && msg.url) {
+      const hash = msg.url.includes('#') ? msg.url.slice(msg.url.indexOf('#')) : `#${DEFAULT_ROUTE}`;
+      if (location.hash === hash) route(); else location.hash = hash;
+    } else if (msg.type === 'refresh' && app.profile) {
+      route();
+    }
+  });
+}
+
 async function boot() {
   const problem = configProblem();
   if (problem) { renderConfigMissing(main, problem); return; }
 
+  registerServiceWorker();
+  listenServiceWorker();
+
   const recovering = /type=recovery/.test(location.hash);
   const linkError = hashErrorMessage();
+  // Bildirimden açıldıysa girişten sonra o göreve dön
+  const initialHash = /^#\/gorev\//.test(location.hash) ? location.hash : null;
 
   supabase.auth.onAuthStateChange((event, session) => {
-    // Supabase içinden başka Supabase çağrısı yapmamak için bir sonraki adıma bırak
     setTimeout(() => {
       if (event === 'PASSWORD_RECOVERY') {
         renderNewPassword(main, () => { started = true; startApp(session); });
       } else if (event === 'SIGNED_OUT') {
         started = false; showLogin();
       } else if (event === 'SIGNED_IN' && session && !started && !recovering) {
-        started = true; startApp(session);
+        started = true;
+        if (initialHash && location.hash !== initialHash) history.replaceState(null, '', `${location.pathname}${initialHash}`);
+        startApp(session);
       }
     }, 0);
   });
@@ -159,7 +193,9 @@ async function boot() {
   }
 
   window.addEventListener('hashchange', () => { if (app.profile) route(); });
-  onLangChange(() => { if (app.profile) route(); else if (!app.session) showLogin(); });
+  onLangChange(() => {
+    if (app.profile) { if (bell) { bell.destroy(); bell = null; } route(); } else if (!app.session) showLogin();
+  });
   window.addEventListener('offline', () => toast(t('app.offline'), { type: 'error' }));
 }
 

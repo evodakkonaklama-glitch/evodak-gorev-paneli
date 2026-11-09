@@ -1,0 +1,17 @@
+{
+  "name": "Evodak Görev Paneli",
+  "short_name": "Evodak",
+  "description": "Evodak projelerinin görev takip ve hatırlatma paneli",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EEF1F5",
+  "theme_color": "#14304D",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,5 +1,5 @@
 // Görevler – 1. aşama: arama ve filtreli basit liste (telefonda kart). Düzenleme 3. aşamada.
-import { h, clear, icon, spinner } from './ui.js';
+import { h, clear, icon, spinner, toast } from './ui.js';
 import { t, getLang } from './i18n.js';
 import { supabase, fetchAll, friendlyError } from './supabase.js';
 import { label, searchFold } from './excel-format.js';
@@ -112,7 +112,7 @@ export async function render(root, ctx) {
         draw();
       } }, icon('chevron', isOpen ? 'rot90' : ''), h('span', {}, tk.title));
       const info = dueInfo(tk);
-      tbody.append(h('tr', { class: `task-row ${info?.tone === 'overdue' ? 'is-overdue' : ''} ${tk.status === 'done' ? 'is-done' : ''}` },
+      tbody.append(h('tr', { class: `task-row ${info?.tone === 'overdue' ? 'is-overdue' : ''} ${tk.status === 'done' ? 'is-done' : ''}`, dataset: { task: tk.id } },
         h('td', { class: 'c-no', 'data-label': t('tasks.col_no') }, tk.no),
         h('td', { class: 'c-title', 'data-label': t('tasks.col_title') }, toggle,
           h('div', { class: 'sub muted' }, [tk.section, tk.category].filter(Boolean).join(' · '))),
@@ -124,7 +124,11 @@ export async function render(root, ctx) {
       if (isOpen) {
         const cell = h('td', { colspan: 7 });
         tbody.append(h('tr', { class: 'detail-row' }, cell));
-        fillDetail(cell, tk, personById);
+        fillDetail(cell, tk, personById, ctx, async () => {
+          const { data } = await supabase.from('tasks').select('status,progress,updated_at,updated_by').eq('id', tk.id).maybeSingle();
+          if (data) Object.assign(tk, data);
+          draw();
+        });
       }
     }
     listBox.append(h('div', { class: 'table-wrap' }, h('table', { class: 'task-table' },
@@ -139,11 +143,20 @@ export async function render(root, ctx) {
       tbody)));
   }
 
+  if (ctx.openTaskId && tasks.some((tk) => tk.id === ctx.openTaskId)) {
+    state.q = ''; state.project = ''; state.status = '';
+    search.value = ''; projectSel.value = ''; statusSel.value = '';
+    openRows.add(ctx.openTaskId);
+  }
   draw();
+  if (ctx.openTaskId) {
+    const row = listBox.querySelector(`[data-task="${ctx.openTaskId}"]`);
+    if (row) { row.scrollIntoView({ block: 'center' }); row.querySelector('.row-toggle')?.focus({ preventScroll: true }); }
+  }
   return () => clearTimeout(timer);
 }
 
-async function fillDetail(cell, tk, personById) {
+async function fillDetail(cell, tk, personById, ctx, onChange) {
   const lang = getLang();
   const meta = [
     [t('tasks.assignee'), tk.assignee_id ? personById.get(tk.assignee_id) : t('tasks.unassigned')],
@@ -163,6 +176,7 @@ async function fillDetail(cell, tk, personById) {
       h('ul', { class: 'refs' }, tk.reference_links.map((r) => h('li', {}, /^https?:\/\//i.test(r)
         ? h('a', { href: r, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), r)
         : h('span', {}, icon('file'), r))))) : null,
+    taskActions(tk, ctx, onChange),
     h('p', { class: 'muted small' }, t('tasks.last_change', { who: personById.get(tk.updated_by) || '—', when: fmtDateTime(tk.updated_at) }),
       ' · ', t('tasks.detail_soon'))));
 
@@ -172,4 +186,32 @@ async function fillDetail(cell, tk, personById) {
   if (!data.length) { list.replaceWith(h('p', { class: 'muted' }, '—')); return; }
   data.forEach((it) => list.append(h('li', { class: it.done ? 'done' : '' },
     icon(it.done ? 'check' : 'circle'), h('span', {}, it.text, it.note ? h('span', { class: 'muted' }, ` – ${it.note}`) : null))));
+}
+
+// Bildirimdeki düğmelerin aynısı (iPhone bildirimde düğme göstermeyebilir)
+function taskActions(tk, ctx, onChange) {
+  if (tk.status === 'done' || tk.status === 'cancelled') return null;
+  const canEdit = ctx.isAdmin || (ctx.profile.role === 'member' && tk.assignee_id === ctx.profile.id);
+  const box = h('div', { class: 'row-wrap' });
+  if (canEdit) {
+    box.append(h('button', { class: 'btn btn-success', type: 'button', onclick: async (e) => {
+      e.target.disabled = true;
+      const { data: items } = await supabase.from('checklist_items').select('id').eq('task_id', tk.id).eq('done', false);
+      let error;
+      if (items && items.length) ({ error } = await supabase.from('checklist_items').update({ done: true }).eq('task_id', tk.id).eq('done', false));
+      if (!error) ({ error } = await supabase.from('tasks').update({ status: 'done' }).eq('id', tk.id).neq('status', 'done'));
+      if (error) { toast(friendlyError(error), { type: 'error' }); e.target.disabled = false; return; }
+      toast(t('tasks.marked_done'), { type: 'ok' });
+      onChange();
+    } }, icon('check'), t('tasks.mark_done')));
+  }
+  box.append(h('button', { class: 'btn', type: 'button', onclick: async (e) => {
+    e.target.disabled = true;
+    const { error } = await supabase.from('notification_snoozes').insert({
+      task_id: tk.id, profile_id: ctx.profile.id, until: new Date(Date.now() + 10 * 60000).toISOString(),
+    });
+    if (error) { toast(friendlyError(error), { type: 'error' }); e.target.disabled = false; return; }
+    toast(t('tasks.snoozed'), { type: 'ok' });
+  } }, icon('clock'), t('tasks.snooze')));
+  return box;
 }

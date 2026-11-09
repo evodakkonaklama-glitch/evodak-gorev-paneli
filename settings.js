@@ -4,6 +4,7 @@ import { t, getLang } from './i18n.js';
 import { label } from './excel-format.js';
 import { supabase, friendlyError } from './supabase.js';
 import { switchLang, logout } from './main.js';
+import { notificationsCard } from './notify-ui.js';
 
 function passwordCard() {
   const msg = h('p', { class: 'form-msg', role: 'alert' });
@@ -47,7 +48,8 @@ export async function render(root, ctx) {
         h('dt', {}, t('settings.name')), h('dd', {}, p.full_name),
         h('dt', {}, t('settings.email')), h('dd', {}, p.email || '—'),
         h('dt', {}, t('settings.role')), h('dd', {}, label('role', p.role, getLang()))),
-      h('div', { class: 'field', style: 'margin-top:14px' }, h('label', { for: 'set-lang' }, t('settings.language')), langSel)),
+      h('div', { class: 'field mt' }, h('label', { for: 'set-lang' }, t('settings.language')), langSel)),
+    notificationsCard(ctx),
     passwordCard(),
     ctx.isAdmin ? h('div', { class: 'card' },
       h('h2', { class: 'h2' }, t('settings.data')),
