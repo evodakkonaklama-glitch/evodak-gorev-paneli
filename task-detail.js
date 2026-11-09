@@ -11,6 +11,8 @@ import {
 import { attachmentsSection } from './files.js';
 
 let current = null;   // { id, el, offs[], returnFocus }
+let basePath = '/gorevler';
+export function setDetailBase(path) { basePath = path || '/gorevler'; }
 
 export function isDetailOpen() { return Boolean(current); }
 
@@ -22,7 +24,7 @@ export function closeDetail(navigate = true) {
   el.remove();
   document.body.classList.remove('drawer-open');
   current = null;
-  if (navigate && location.hash.startsWith('#/gorev/')) location.hash = '#/gorevler';
+  if (navigate && location.hash.startsWith('#/gorev/')) location.hash = `#${basePath}`;
   const target = returnFocus || document.querySelector(`[data-task="${id}"] a`);
   if (target && document.contains(target)) target.focus({ preventScroll: true });
 }
@@ -41,7 +43,7 @@ export function openDetail(id, ctx) {
   const task = store.tasks.get(id);
   if (!task) {
     if (store.ready) toast(t('detail.not_found'), { type: 'error' });
-    if (location.hash.startsWith('#/gorev/')) history.replaceState(null, '', '#/gorevler');
+    if (location.hash.startsWith('#/gorev/')) history.replaceState(null, '', `#${basePath}`);
     return;
   }
 
@@ -266,6 +268,28 @@ export function openDetail(id, ctx) {
       editable ? add : null);
   }
 
+  // ---- tekrarlayan görev: geçmiş tekrarlar
+  const occBox = h('div');
+  async function loadOccurrences() {
+    const tk = store.tasks.get(id);
+    clear(occBox);
+    if (!tk || tk.recurrence === 'once') return;
+    const { data } = await supabase.from('task_occurrences').select('occurrence_date,completed_at,completed_by,checklist_snapshot')
+      .eq('task_id', id).order('occurrence_date', { ascending: false }).limit(12);
+    const rows = data || [];
+    occBox.append(h('div', { class: 'checklist-edit' },
+      h('h3', { class: 'h3' }, icon('repeat'), ' ', t('rec.history'), h('span', { class: 'muted' }, ` ${rows.length}`)),
+      h('p', { class: 'muted small' }, t('rec.next_due', { date: fmtDate(tk.due_date), rule: label('recurrence', tk.recurrence, lang) })),
+      rows.length ? h('ul', { class: 'history-list occ-list' }, rows.map((r) => {
+        const items = Array.isArray(r.checklist_snapshot) ? r.checklist_snapshot : [];
+        const who = store.profiles.find((p) => p.id === r.completed_by)?.full_name || t('detail.system');
+        return h('li', {}, h('strong', {}, fmtDate(r.occurrence_date)), ' ',
+          h('span', { class: 'muted small' }, `${t('rec.completed_by', { who, when: fmtDateTime(r.completed_at) })}${items.length ? ` · ${items.filter((x) => x.done).length}/${items.length}` : ''}`));
+      })) : h('p', { class: 'muted small' }, t('rec.none'))));
+  }
+  loadOccurrences();
+  offs.push(on('rollover', (r) => { if (r.id === id) { loadOccurrences(); drawChecklist(); } }));
+
   // ---- dosyalar
   const files = attachmentsSection(id, ctx, editable);
   offs.push(files.destroy);
@@ -319,6 +343,7 @@ export function openDetail(id, ctx) {
       return out;
     }
     if (row.entity === 'attachments') return [t(row.action === 'insert' ? 'hist.file_added' : 'hist.file_deleted', { name: c.file_name || '' })];
+    if (row.action === 'complete_occurrence') return [t('hist.occurrence', { occ: fmtDate(c.occurrence), next: fmtDate(c.next) })];
     if (row.action === 'insert') return [t('hist.created')];
     if (row.action === 'delete') return [t('hist.deleted')];
     if (row.action === 'restore') return [t('hist.restored')];
@@ -379,6 +404,7 @@ export function openDetail(id, ctx) {
         field(t('tasks.tags'), tagsCtl, { help: t('detail.tags_help') })),
       field(t('tasks.description'), descCtl, { wide: true }),
       checklistBox,
+      occBox,
       files.el,
       h('div', { class: 'field field-wide' },
         h('label', { for: refsCtl.el.id || (refsCtl.el.id = `refs-${id}`) }, t('tasks.references')),

@@ -49,6 +49,8 @@ const TEXT = {
     leftMin: (n: number) => `${n} dk kaldı`, leftHours: (n: number) => `${n} sa kaldı`, leftDays: (n: number) => `${n} gün kaldı`,
     mailSubject: (t: string) => `Hatırlatma: ${t}`, mailGroupSubject: (n: number) => `${n} görev için hatırlatma`,
     open: 'Panelde aç', footer: 'Bu e-posta Evodak Görev Paneli tarafından gönderildi.',
+    summaryTitle: 'Günlük özet',
+    sumToday: (n: number) => `Bugün ${n} iş`, sumOverdue: (n: number) => `${n} geciken`, sumSoon: (n: number) => `3 gün içinde ${n}`,
   },
   en: {
     done: 'Done', snooze: 'Snooze 10 min',
@@ -60,6 +62,8 @@ const TEXT = {
     leftMin: (n: number) => `${n} min left`, leftHours: (n: number) => `${n} h left`, leftDays: (n: number) => `${n} days left`,
     mailSubject: (t: string) => `Reminder: ${t}`, mailGroupSubject: (n: number) => `Reminder for ${n} tasks`,
     open: 'Open in panel', footer: 'This email was sent by the Evodak Task Panel.',
+    summaryTitle: 'Daily summary',
+    sumToday: (n: number) => `${n} due today`, sumOverdue: (n: number) => `${n} overdue`, sumSoon: (n: number) => `${n} in next 3 days`,
   },
 };
 type Lang = keyof typeof TEXT;
@@ -170,7 +174,7 @@ function mailHtml(lines: { title: string; sub: string; url: string }[], lang: st
 // ---------------------------------------------------------------- kuyruk işleme
 type Row = { id: string; task_id: string | null; profile_id: string; kind: string; channel: string; fire_at: string; attempts: number };
 type Task = { id: string; title: string; due_date: string | null; due_time: string | null; status: string; deleted_at: string | null; projects: { name: string } | null };
-type Profile = { id: string; full_name: string; email: string | null; language: string };
+type Profile = { id: string; full_name: string; email: string | null; language: string; role?: string; only_own_tasks?: boolean };
 
 async function finish(ids: string[], status: 'sent' | 'failed' | 'skipped', error?: string) {
   if (!ids.length) return;
@@ -269,6 +273,42 @@ async function processEmail(profile: Profile, rows: Row[], tasks: Map<string, Ta
   await finish(rows.map((r) => r.id), res.ok ? 'sent' : 'failed', res.ok ? undefined : `${res.status} ${res.error ?? ''}`);
 }
 
+// Günlük özet: bugün başlayan/biten, gecikenler, önümüzdeki 3 gün. Boş günde gönderilmez.
+async function processSummary(profile: Profile, row: Row, subs: Sub[]) {
+  const t = L(profile.language);
+  const now = new Date();
+  const ist = new Date(now.getTime() + 3 * 3600000);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const today = iso(ist);
+  const in3 = iso(new Date(ist.getTime() + 3 * 86400000));
+  let q = db.from('tasks').select('id,title,due_date,due_time,start_date,status,assignee_id')
+    .is('deleted_at', null).not('status', 'in', '(done,cancelled)');
+  const sees = ['owner', 'admin'].includes(profile.role ?? '') && !profile.only_own_tasks;
+  q = sees ? q.or(`assignee_id.eq.${profile.id},assignee_id.is.null`) : q.eq('assignee_id', profile.id);
+  const { data, error } = await q.limit(2000);
+  if (error) { await finish([row.id], 'failed', error.message); return; }
+  const list = data ?? [];
+  const overdue = list.filter((x) => x.due_date && istanbulToDate(x.due_date, (x.due_time ?? '09:00').slice(0, 5)) < now);
+  const todayList = list.filter((x) => (x.due_date === today || x.start_date === today) && !overdue.includes(x));
+  const soon = list.filter((x) => x.due_date && x.due_date > today && x.due_date <= in3);
+  if (!overdue.length && !todayList.length && !soon.length) { await finish([row.id], 'skipped', 'empty_day'); return; }
+
+  const parts = [todayList.length ? t.sumToday(todayList.length) : '', overdue.length ? t.sumOverdue(overdue.length) : '', soon.length ? t.sumSoon(soon.length) : ''].filter(Boolean);
+  const top = [...overdue, ...todayList].slice(0, 3).map((x) => `• ${x.title}`);
+  const payload = {
+    title: overdue.length ? `${t.summaryTitle} – ${t.sumOverdue(overdue.length)}` : t.summaryTitle,
+    body: [parts.join(' · '), ...top].join('\n'),
+    url: `${APP_URL}#/bugun`, tag: `daily-summary-${today}`, lang: profile.language, actions: [],
+  };
+  if (row.attempts === 1) {
+    await db.from('inbox').insert({ profile_id: profile.id, kind: 'daily_summary', title: t.summaryTitle, body: parts.join(' · ') });
+  }
+  if (!subs.length) { await finish([row.id], 'skipped', 'no_subscription'); return; }
+  const results = await Promise.all(subs.map((s) => sendPush(s, payload)));
+  if (results.some((x) => x.ok)) await finish([row.id], 'sent');
+  else await finish([row.id], 'failed', results.map((x) => `${x.device ?? '?'}: ${x.status} ${x.error ?? ''}`).join(' | '));
+}
+
 async function runCron() {
   const { data: planned, error: planErr } = await db.rpc('plan_notifications');
   if (planErr) throw planErr;
@@ -281,7 +321,7 @@ async function runCron() {
   const profileIds = [...new Set(rows.map((r) => r.profile_id))];
   const [{ data: taskData }, { data: profData }, { data: subData }] = await Promise.all([
     db.from('tasks').select('id,title,due_date,due_time,status,deleted_at,projects(name)').in('id', taskIds.length ? taskIds : ['00000000-0000-0000-0000-000000000000']),
-    db.from('profiles').select('id,full_name,email,language').in('id', profileIds),
+    db.from('profiles').select('id,full_name,email,language,role,only_own_tasks').in('id', profileIds),
     db.from('push_subscriptions').select('id,endpoint,p256dh,auth,device_name,profile_id,failure_count').in('profile_id', profileIds),
   ]);
   const tasks = new Map((taskData ?? []).map((t) => [t.id, t as unknown as Task]));
@@ -290,7 +330,9 @@ async function runCron() {
   // Görev silinmiş/tamamlanmışsa gönderme
   const valid: Row[] = [];
   const skipped: string[] = [];
+  const summaries: Row[] = [];
   for (const r of rows) {
+    if (r.kind === 'daily_summary') { if (profiles.has(r.profile_id)) summaries.push(r); else skipped.push(r.id); continue; }
     const task = r.task_id ? tasks.get(r.task_id) : null;
     if (!task || task.deleted_at || ['done', 'cancelled'].includes(task.status) || !profiles.has(r.profile_id)) skipped.push(r.id);
     else valid.push(r);
@@ -304,6 +346,7 @@ async function runCron() {
     const mail = mine.filter((r) => r.channel === 'email');
     if (push.length) await processPush(profile, push, tasks, subs);
     if (mail.length) await processEmail(profile, mail, tasks);
+    for (const r of summaries.filter((x) => x.profile_id === profile.id)) await processSummary(profile, r, subs);
   }
   return { planned, processed: rows.length, skipped: skipped.length };
 }

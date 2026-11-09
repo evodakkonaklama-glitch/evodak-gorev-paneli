@@ -6,10 +6,15 @@ import { renderLogin, renderNewPassword, renderConfigMissing } from './login.js'
 import * as tasksView from './tasks.js';
 import * as importView from './import.js';
 import * as settingsView from './settings.js';
+import * as todayView from './today.js';
+import * as calendarView from './calendar.js';
+import * as projectsView from './projects.js';
+import { openDetail, closeDetail, isDetailOpen, setDetailBase } from './task-detail.js';
 import { registerServiceWorker, syncSubscription } from './push.js';
 import { bellButton, maybeShowPushPrompt, stopInboxChannel } from './notify-ui.js';
 import { store, loadAll, on as onStore, reset as resetStore } from './store.js';
 import { kv } from './idb.js';
+import { fmtDate } from './dates.js';
 
 const main = document.getElementById('main');
 const topbar = document.getElementById('topbar');
@@ -17,11 +22,14 @@ const topbar = document.getElementById('topbar');
 export const app = { session: null, profile: null, isAdmin: false, openTaskId: null };
 
 const ROUTES = {
+  '/bugun': { view: todayView, nav: 'nav.today', icon: 'sun' },
   '/gorevler': { view: tasksView, nav: 'nav.tasks', icon: 'list' },
+  '/takvim': { view: calendarView, nav: 'nav.calendar', icon: 'calendar' },
+  '/projeler': { view: projectsView, nav: 'nav.projects', icon: 'folder' },
   '/ice-aktar': { view: importView, nav: 'nav.import', icon: 'upload', admin: true },
   '/ayarlar': { view: settingsView, nav: 'nav.settings', icon: 'settings' },
 };
-const DEFAULT_ROUTE = '/gorevler';
+const DEFAULT_ROUTE = '/bugun';
 
 let cleanup = null;
 let started = false;
@@ -33,7 +41,7 @@ let saveBadge = null;
 function parseRoute() {
   const p = location.hash.replace(/^#/, '').split('?')[0];
   const m = p.match(/^\/gorev\/([0-9a-f-]{36})$/i);
-  if (m) return { path: '/gorevler', taskId: m[1] };
+  if (m) return { path: currentPath || '/gorevler', taskId: m[1] };
   return { path: ROUTES[p] ? p : DEFAULT_ROUTE, taskId: null };
 }
 
@@ -47,12 +55,15 @@ async function route() {
   const def = ROUTES[path];
   if (def.admin && !app.isAdmin) { navigate(DEFAULT_ROUTE); return; }
   app.openTaskId = taskId;
-  // Aynı sayfada yalnızca görev açılıp kapanıyorsa sayfayı yeniden çizme
-  if (path === currentPath && typeof def.view.update === 'function' && main.firstChild) {
-    def.view.update(app);
+  // Aynı sayfada yalnızca görev açılıp kapanıyorsa sayfayı yeniden çizme: detay mevcut sayfanın üstünde açılır
+  if (path === currentPath && main.firstChild) {
+    if (taskId) openDetail(taskId, app);
+    else if (isDetailOpen()) closeDetail(false);
     return;
   }
+  if (isDetailOpen()) closeDetail(false);
   currentPath = path;
+  setDetailBase(path);
   if (typeof cleanup === 'function') cleanup();
   cleanup = null;
   renderTopbar(path);
@@ -103,6 +114,7 @@ function drawSaveStatus() {
   saveBadge.title = text;
 }
 onStore('status', drawSaveStatus);
+onStore('rollover', (r) => toast(t('rec.next', { date: fmtDate(r.next) }), { type: 'ok', timeout: 6000 }));
 onStore('error', (err) => toast(`${t('save.error')}: ${friendlyError(err)}`, { type: 'error', timeout: 6000 }));
 onStore('conflict', (c) => { if (!location.hash.includes(c.id)) toast(t('conflict.toast'), { type: 'error', timeout: 8000, action: { label: t('conflict.open'), run: () => navigate(`/gorev/${c.id}`) } }); });
 

@@ -191,6 +191,11 @@ async function refreshTask(id) {
   else if (data === null) { store.tasks.delete(id); emitData(); emit('task', id); }
 }
 
+async function refreshItems(taskId) {
+  const { data } = await supabase.from('checklist_items').select('id,task_id,text,note,done,done_at,done_by,sort_order').eq('task_id', taskId).order('sort_order');
+  if (data) { store.checklist.set(taskId, data); emit('checklist', taskId); }
+}
+
 // ---------------------------------------------------------------- görev düzenleme
 export function updateTask(id, patch) {
   const t = store.tasks.get(id);
@@ -271,6 +276,7 @@ function recalcLocal(taskId) {
   const t = store.tasks.get(taskId);
   const list = itemsOf(taskId);
   if (!t) return;
+  if (t.recurrence !== 'once') { emit('task', taskId); emitData(); return; } // tekrar döngüsünü sunucu yönetir
   if (list.length) {
     const done = list.filter((x) => x.done).length;
     t.progress = Math.round((done * 100) / list.length);
@@ -348,6 +354,12 @@ export async function reorderItems(taskId, orderedIds) {
 export async function setStatus(taskId, status) {
   const t = store.tasks.get(taskId);
   if (!t || t.status === status) return;
+  // Tekrarlayan görevde maddelere dokunma: sunucu tamamlanan tekrarı kaydeder, tarihi ilerletir, maddeleri sıfırlar
+  if (status === 'done' && t.recurrence !== 'once') {
+    updateTask(taskId, { status });
+    await flushTask(taskId);
+    return 'recurring';
+  }
   if (status === 'done') {
     const open = itemsOf(taskId).filter((x) => !x.done);
     for (const it of open) { it.done = true; }
@@ -461,6 +473,8 @@ async function runOp(op) {
     else res = await supabase.from('checklist_items').delete().eq('id', op.id);
     if (res.error) throw res.error;
     await refreshTask(op.taskId); // oran, durum ve sürüm sunucuda hesaplandı
+    const tk = store.tasks.get(op.taskId);
+    if (tk && tk.recurrence !== 'once') await refreshItems(op.taskId); // tekrar döngüsü maddeleri sıfırlamış olabilir
     return null;
   }
   return null;
@@ -471,7 +485,15 @@ async function runTaskUpdate(op, attempt = 0) {
   if (op.version != null && !op.force) q = q.eq('version', op.version);
   const { data, error } = await q.select(TASK_COLS);
   if (error) throw error;
-  if (data && data.length) { applyServerTask(data[0]); return null; }
+  if (data && data.length) {
+    const before = store.tasks.get(op.id)?.due_date;
+    applyServerTask(data[0]);
+    if (op.patch.status === 'done' && data[0].status !== 'done' && data[0].recurrence !== 'once') {
+      await refreshItems(op.id);
+      emit('rollover', { id: op.id, from: before, next: data[0].due_date });
+    }
+    return null;
+  }
 
   // Satır güncellenmedi: sürüm değişmiş (başkası kaydetmiş) veya görev yok/yetki yok
   const { data: server, error: e2 } = await supabase.from('tasks').select(TASK_COLS).eq('id', op.id).maybeSingle();

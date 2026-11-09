@@ -63,3 +63,28 @@ function daysBetween(a, b) {
 }
 
 export { pad };
+
+// ---- takvim yardımcıları (tüm tarihler 'YYYY-MM-DD')
+export function addDays(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return dt.toISOString().slice(0, 10);
+}
+export function weekdayIndex(iso) { // Pazartesi = 0
+  const [y, m, d] = iso.split('-').map(Number);
+  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+}
+export function startOfWeek(iso) { return addDays(iso, -weekdayIndex(iso)); }
+export function startOfMonth(iso) { return `${iso.slice(0, 7)}-01`; }
+export function addMonths(iso, n) {
+  const [y, m] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1 + n, 1));
+  return dt.toISOString().slice(0, 10);
+}
+export function fmtLong(iso, lang = 'tr', opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'tr-TR', { ...opts, timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+export function weekdayNames(lang = 'tr', style = 'short') {
+  return Array.from({ length: 7 }, (_, i) => fmtLong(addDays('2026-11-09', i), lang, { weekday: style })); // 09.11.2026 Pazartesi
+}

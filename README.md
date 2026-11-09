@@ -16,7 +16,7 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 | 2 | Bildirimler (uygulama kapalıyken) | ✅ |
 | 3 | Görev ekranları, Kanban, otomatik kayıt, Realtime | ✅ |
 | 4 | Dosyalar | ✅ |
-| 5 | Tekrarlayan görevler, günlük özet, Bugün, Takvim, Projeler | ⏳ |
+| 5 | Tekrarlayan görevler, günlük özet, Bugün, Takvim, Projeler | ✅ |
 | 6 | Roller, şablonlar, dışa aktarma, yedek, PWA | ⏳ |
 
 ## Klasörler

@@ -279,14 +279,37 @@ Bu aşamada Supabase'de yapılacak bir şey **yok**. Yalnızca GitHub'a dosya y�
 - **Ayarlar → Dosya alanı**: kullanılan alan / 1 GB.
 - Dosyalar herkese kapalıdır; yalnızca o görevi görebilen ekip üyeleri açabilir. Açma linkleri 1 saat geçerlidir.
 
+## 5. AŞAMA – Planlama
+
+### A. Supabase: planlama kodunu çalıştırın
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `006_planlama.sql` dosyasının tamamını yapıştırın → **Run**.
+3. Altta **tekrar döngüsü kuruldu** yazısı görünmeli.
+
+### B. Supabase: send-reminders fonksiyonunu güncelleyin (günlük özet için)
+1. Sol menü **Edge Functions** → **send-reminders** → üstte **Code** sekmesi.
+2. Editördeki kodun tamamını silin (Ctrl+A → Delete), `send-reminders.ts` içeriğini yapıştırın.
+3. Sağ altta **Deploy updates**. "JWT doğrulama" ayarı kapalı kalmalı (değiştirmeyin).
+
+### C. GitHub: dosyaları yükleyin
+`evodak-gorev-paneli-asama5.zip` içindeki **tüm dosyaları** deponuza yükleyin (**Add file → Upload files → Commit changes**). Yeni dosyalar: `today.js`, `calendar.js`, `projects.js`, `006_planlama.sql`. 1–2 dakika sonra paneli yenileyin (Ctrl+F5). Telefonda uygulamayı kapatıp yeniden açın.
+
+### D. Deneyin
+- Panel artık **Bugün** ekranıyla açılır: üstte sayılar, altta gecikenler, bugünün işleri, bugün tekrarlananlar, yaklaşan 3 gün. Yuvarlak düğmeye basınca iş tamamlanır.
+- **Tekrarlayan görev:** Bir görevde **Tekrar**'ı "Her hafta" yapın → tamamlayın. Görev kaybolmaz; bitiş tarihi bir hafta ileri gider, kontrol listesi sıfırlanır. Görevin içinde **Geçmiş tekrarlar** bölümünde kimin ne zaman tamamladığı görünür. Tarihi çok geçmişte kalmış günlük bir iş tamamlanınca sıradaki tekrar bugünden itibaren hesaplanır.
+- **Takvim:** Ay / Hafta / Gün görünümü. Bilgisayarda bir görevi başka güne sürükleyince bitiş tarihi değişir. Telefonda günlere dokunun.
+- **Projeler:** 21 proje kartı; karta tıklayınca o projenin görevleri açılır.
+- **Günlük özet:** **Ayarlar → Bildirimler**'de seçtiğiniz saatte (varsayılan 08:30) her gün tek bildirim gelir: "Bugün X iş, Y geciken". O gün hiç iş yoksa gelmez.
+- Telefonda menü artık ekranın altındadır.
+
 ---
 
 ## Bilinen sınırlar
 
-- **Şifremi unuttum:** Supabase'in kendi e-posta servisi yalnızca Supabase hesabınızın ekibindeki adreslere posta gönderir, saatte de çok az e-posta gönderir. Bu yüzden 2. aşama F adımı (Resend SMTP) yapılana kadar bu bağlantı Hakan'a ulaşmayabilir. O zamana kadar şifresini unutan kişiyi **Authentication → Users** ekranında silip aynı e-postayla yeniden ekleyin (B adımı). Profili, rolü ve görevleri etkilenmez; yeni hesap profile kendiliğinden bağlanır.
+- **Şifremi unuttum:** Supabase'in kendi e-posta servisi yalnızca Supabase hesabınızın ekibindeki adreslere posta gönderir, saatte de çok az e-posta gönderir. Bu yüzden (e-posta servisi kurulmadığı için) bu bağlantı kişiye ulaşmayabilir. Şifresini unutan kişiyi **Authentication → Users** ekranında silip aynı e-postayla yeniden ekleyin (B adımı). Profili, rolü ve görevleri etkilenmez; yeni hesap profile kendiliğinden bağlanır.
 - **Giriş hataları:** Güvenlik gereği Supabase "kullanıcı yok" ile "şifre hatalı"yı ayırt etmez. İkisinde de "E-posta veya şifre hatalı" yazar.
 - **iPhone:** Bildirim için iOS 16.4 veya üstü ve **Ana Ekrana Ekle** ile kurulum gerekir. Safari sekmesinde açılan panel bildirim alamaz.
 - **Bilgisayar:** Windows'ta Chrome/Edge'in "kapatıldığında arka planda çalışmaya devam et" ayarı açık olmalı. Mac'te Safari'nin "Dock'a Ekle" uygulaması kullanılmalı.
 - **Supabase ücretsiz planı:** Proje 7 gün hiç kullanılmazsa duraklatılır; bu sürede bildirim gitmez. Panel her gün kullanılıyorsa sorun olmaz. Kesintisizlik için Pro plan (aylık 25 $) önerilir.
-- **E-posta:** Resend ücretsiz planı günde 100, ayda 3.000 e-postaya izin verir. Alan adı doğrulanana kadar e-posta yalnızca evodak.konaklama@gmail.com adresine gider.
+- **E-posta:** E-posta bildirimleri sizin isteğinizle kapalıdır; tüm bildirimler telefon/bilgisayar bildirimi olarak gelir.
 - **Hatırlatma zamanı:** Sunucu her dakika kontrol eder; bildirim zamanından en geç 1–2 dakika sonra gelir. Sunucu 60 dakikadan uzun süre çalışamazsa, o aralıkta kaçan hatırlatmalar sonradan gönderilmez.

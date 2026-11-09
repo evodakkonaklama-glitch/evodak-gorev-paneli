@@ -93,6 +93,13 @@ function sortTasks(list, projectOrder) {
   });
 }
 
+// Başka ekrandan (Projeler) filtreyle görev listesine gitmek için
+export function setTaskFilter(patch) {
+  ['project', 'section', 'category', 'status', 'priority', 'assignee', 'tag', 'from', 'to'].forEach((k) => { state[k] = ''; });
+  Object.assign(state, { quick: 'all', q: '' }, patch);
+  saveState();
+}
+
 function activeFilterCount() {
   return ['project', 'section', 'category', 'status', 'priority', 'assignee', 'tag', 'from', 'to'].filter((k) => state[k]).length;
 }
