@@ -261,6 +261,26 @@ Bu aşamada Supabase'de yapılacak bir şey **yok**. Yalnızca GitHub'a dosya y�
 
 ---
 
+## 4. AŞAMA – Dosyalar
+
+### A. Supabase: dosya deposunu kurun
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `005_dosyalar.sql` dosyasının tamamını yapıştırın → **Run**.
+3. Altta önce `files | false | 20971520`, sonra 3 kural adı (`evodak_files_delete`, `evodak_files_insert`, `evodak_files_read`) görünmeli.
+   - **Storage** menüsünde **files** adlı, **Private** (özel) bir depo oluşmuş olmalı.
+
+### B. GitHub: dosyaları yükleyin
+`evodak-gorev-paneli-asama4.zip` içindeki **tüm dosyaları** deponuza yükleyin (**Add file → Upload files → Commit changes**). Yeni dosyalar: `files.js`, `005_dosyalar.sql`. 1–2 dakika sonra paneli yenileyin (Ctrl+F5).
+
+### C. Deneyin
+- Bir görevi açın → **Dosyalar** bölümü → **Dosya seç** (veya sürükleyip bırakın). Yükleme sırasında ilerleme çubuğu görünür.
+- Resme veya PDF'e tıklayınca önizleme açılır; diğer dosyalar indirilir.
+- 20 MB'tan büyük dosyada "Videoları Google Drive veya Terabox'a yükleyip linkini ekleyin" uyarısı çıkar.
+- **Ayarlar → Dosya alanı**: kullanılan alan / 1 GB.
+- Dosyalar herkese kapalıdır; yalnızca o görevi görebilen ekip üyeleri açabilir. Açma linkleri 1 saat geçerlidir.
+
+---
+
 ## Bilinen sınırlar
 
 - **Şifremi unuttum:** Supabase'in kendi e-posta servisi yalnızca Supabase hesabınızın ekibindeki adreslere posta gönderir, saatte de çok az e-posta gönderir. Bu yüzden 2. aşama F adımı (Resend SMTP) yapılana kadar bu bağlantı Hakan'a ulaşmayabilir. O zamana kadar şifresini unutan kişiyi **Authentication → Users** ekranında silip aynı e-postayla yeniden ekleyin (B adımı). Profili, rolü ve görevleri etkilenmez; yeni hesap profile kendiliğinden bağlanır.

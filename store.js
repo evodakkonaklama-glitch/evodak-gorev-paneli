@@ -156,6 +156,7 @@ function subscribeRealtime() {
       emit('checklist', it.task_id);
       scheduleSnapshot();
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'attachments' }, (p) => emit('attachments', p.new?.task_id || null))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => refreshSmall('projects'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'lookups' }, () => refreshSmall('lookups'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => refreshSmall('profiles'))

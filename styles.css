@@ -447,6 +447,38 @@ textarea.input { resize: vertical; line-height: 1.45; }
   .task-table .c-title .sub { margin-left: 0; }
 }
 
+/* ---------- 4. aşama: dosyalar ---------- */
+.files-box { background: var(--card); padding: 14px; border-radius: var(--radius); box-shadow: var(--shadow); }
+.file-list, .upload-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.file-item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px; border-radius: 8px; background: #f6f8fa; }
+.file-icon { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-bg); color: var(--navy-2); }
+.file-image { background: var(--green-bg); color: var(--green); }
+.file-pdf { background: var(--red-bg); color: var(--red); }
+.file-info { display: grid; min-width: 0; }
+.file-name { background: none; border: 0; padding: 0; text-align: left; font-weight: 700; color: var(--navy-2); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+.file-name:hover { text-decoration: underline; }
+.file-tools { display: flex; gap: 2px; }
+.upload-item { display: grid; gap: 4px; padding: 8px; border-radius: 8px; background: #fffaf0; }
+.upload-name { font-weight: 600; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-drop {
+  display: grid; justify-items: center; text-align: center; gap: 4px; padding: 16px; border: 2px dashed #b9c4d1; border-radius: 10px;
+  cursor: pointer; color: var(--navy); background: #fafbfd;
+}
+.file-drop:hover, .file-drop.drag { border-color: var(--green); background: #f3faf8; }
+input[type=file]:focus-visible + .file-drop { box-shadow: var(--focus); }
+.dialog-preview { width: min(96vw, 1000px); max-width: none; height: min(92vh, 900px); padding: 0; display: none; }
+.dialog-preview[open] { display: flex; flex-direction: column; }
+.preview-head { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.preview-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-img { max-width: 100%; max-height: 100%; object-fit: contain; margin: auto; display: block; }
+.preview-frame { flex: 1; width: 100%; border: 0; }
+.progress-fill.fill-amber { background: var(--amber); }
+.progress-fill.fill-red { background: var(--red); }
+@media (max-width: 700px) {
+  .dialog-preview { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
+  .preview-head .btn { padding: 6px 10px; }
+}
+
 /* Telefon */
 @media (max-width: 700px) {
   main { padding-top: 14px; }

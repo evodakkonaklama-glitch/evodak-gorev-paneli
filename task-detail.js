@@ -8,6 +8,7 @@ import {
   store, on, updateTask, setStatus, hasPending, addItem, toggleItem, editItem, deleteItem, reorderItems,
   deleteTask, restoreTask, snooze, createTask, resolveConflict, flushTask,
 } from './store.js';
+import { attachmentsSection } from './files.js';
 
 let current = null;   // { id, el, offs[], returnFocus }
 
@@ -265,6 +266,10 @@ export function openDetail(id, ctx) {
       editable ? add : null);
   }
 
+  // ---- dosyalar
+  const files = attachmentsSection(id, ctx, editable);
+  offs.push(files.destroy);
+
   // ---- değişiklik geçmişi
   const historyBox = h('div', { class: 'history' });
   const historyDetails = h('details', { class: 'details' }, h('summary', {}, icon('history'), t('detail.history')), historyBox);
@@ -374,6 +379,7 @@ export function openDetail(id, ctx) {
         field(t('tasks.tags'), tagsCtl, { help: t('detail.tags_help') })),
       field(t('tasks.description'), descCtl, { wide: true }),
       checklistBox,
+      files.el,
       h('div', { class: 'field field-wide' },
         h('label', { for: refsCtl.el.id || (refsCtl.el.id = `refs-${id}`) }, t('tasks.references')),
         refsView, editable ? refsCtl.el : null, h('p', { class: 'muted small' }, t('detail.refs_help'))),

@@ -9,6 +9,9 @@ function baseUrl() {
   return m ? m[0] : '';
 }
 
+export const SUPABASE_BASE = baseUrl();
+export const SUPABASE_KEY = String(CONFIG.SUPABASE_ANON_KEY || '').trim();
+
 // 'missing' | 'invalid' | null
 export function configProblem() {
   const url = String(CONFIG.SUPABASE_URL || '').trim();

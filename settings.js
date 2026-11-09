@@ -5,6 +5,7 @@ import { label } from './excel-format.js';
 import { supabase, friendlyError } from './supabase.js';
 import { switchLang, logout } from './main.js';
 import { notificationsCard } from './notify-ui.js';
+import { storageCard } from './files.js';
 
 function passwordCard() {
   const msg = h('p', { class: 'form-msg', role: 'alert' });
@@ -51,6 +52,7 @@ export async function render(root, ctx) {
       h('div', { class: 'field mt' }, h('label', { for: 'set-lang' }, t('settings.language')), langSel)),
     notificationsCard(ctx),
     passwordCard(),
+    ctx.isAdmin ? storageCard() : null,
     ctx.isAdmin ? h('div', { class: 'card' },
       h('h2', { class: 'h2' }, t('settings.data')),
       h('a', { class: 'btn', href: '#/ice-aktar' }, icon('upload'), t('settings.import_excel'))) : null,
