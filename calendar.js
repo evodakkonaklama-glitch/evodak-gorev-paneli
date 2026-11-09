@@ -1,9 +1,11 @@
-// Takvim: gün / hafta / ay. Görevi başka güne sürükleyince bitiş tarihi değişir.
+// Takvim: gün / hafta / ay / Gantt / Plan (zaman bloklama). Görevi başka güne sürükleyince bitiş tarihi değişir.
 import { h, clear, icon, spinner, toast } from './ui.js';
 import { t, getLang } from './i18n.js';
 import { store, on, updateTask } from './store.js';
 import { todayIso, addDays, startOfWeek, startOfMonth, addMonths, fmtLong, weekdayNames, fmtTime, dueInfo, istanbulToDate } from './dates.js';
 import { canEdit, priorityBadge } from './tasks.js';
+import { ganttView, ganttRange } from './gantt.js';
+import { planView, planRange } from './timeblock.js';
 
 const STATE_KEY = 'evodak.calendar';
 const state = (() => {
@@ -64,11 +66,18 @@ export async function render(root, ctx) {
 
   function header() {
     const lang = getLang();
-    const title = state.view === 'month' ? fmtLong(state.anchor, lang, { month: 'long', year: 'numeric' })
-      : state.view === 'week' ? `${fmtLong(startOfWeek(state.anchor), lang, { day: 'numeric', month: 'short' })} – ${fmtLong(addDays(startOfWeek(state.anchor), 6), lang, { day: 'numeric', month: 'short', year: 'numeric' })}`
-        : fmtLong(state.anchor, lang);
+    const weekTitle = (s) => `${fmtLong(s, lang, { day: 'numeric', month: 'short' })} – ${fmtLong(addDays(s, 6), lang, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    let title;
+    if (state.view === 'month') title = fmtLong(state.anchor, lang, { month: 'long', year: 'numeric' });
+    else if (state.view === 'week') title = weekTitle(startOfWeek(state.anchor));
+    else if (state.view === 'gantt') { const r = ganttRange(state); title = `${fmtLong(r.start, lang, { day: 'numeric', month: 'short' })} – ${fmtLong(r.end, lang, { day: 'numeric', month: 'short', year: 'numeric' })}`; }
+    else if (state.view === 'plan' && !mobile()) title = weekTitle(startOfWeek(state.anchor));
+    else title = fmtLong(state.anchor, lang);
     const step = (dir) => {
-      state.anchor = state.view === 'month' ? addMonths(startOfMonth(state.anchor), dir) : addDays(state.anchor, dir * (state.view === 'week' ? 7 : 1));
+      if (state.view === 'month') state.anchor = addMonths(startOfMonth(state.anchor), dir);
+      else if (state.view === 'gantt') state.anchor = addDays(state.anchor, dir * ganttRange(state).step);
+      else if (state.view === 'plan') state.anchor = addDays(state.anchor, dir * planRange(state, mobile()).step);
+      else state.anchor = addDays(state.anchor, dir * (state.view === 'week' ? 7 : 1));
       save(); draw();
     };
     const proj = h('select', { class: 'input', 'aria-label': t('tasks.col_project') }, h('option', { value: '' }, t('tasks.all_projects')),
@@ -81,9 +90,9 @@ export async function render(root, ctx) {
         h('button', { class: 'btn', type: 'button', 'aria-label': t('cal.next'), onclick: () => step(1) }, icon('chevron')),
         h('h1', { class: 'h2 cal-title-h' }, title)),
       h('div', { class: 'cal-tools' },
-        proj,
-        h('div', { class: 'seg', role: 'group', 'aria-label': t('tasks.view') },
-          ...['day', 'week', 'month'].map((v) => h('button', { type: 'button', class: `seg-btn ${state.view === v ? 'active' : ''}`, 'aria-pressed': String(state.view === v),
+        state.view === 'plan' ? null : proj,
+        h('div', { class: 'seg cal-views', role: 'group', 'aria-label': t('tasks.view') },
+          ...['day', 'week', 'month', 'gantt', 'plan'].map((v) => h('button', { type: 'button', class: `seg-btn ${state.view === v ? 'active' : ''}`, 'aria-pressed': String(state.view === v),
             onclick: () => { state.view = v; save(); draw(); } }, t(`cal.${v}`))))));
   }
 
@@ -151,6 +160,8 @@ export async function render(root, ctx) {
   }
 
   function draw() {
+    if (state.view === 'gantt') { clear(page).append(header(), ganttView(state, ctx, { save, draw })); return; }
+    if (state.view === 'plan') { clear(page).append(header(), planView(state, ctx, { save, draw, mobile: mobile() })); return; }
     const byDay = tasksByDay();
     clear(page).append(header(),
       state.view === 'month' ? monthView(byDay) : state.view === 'week' ? weekView(byDay) : dayView(byDay),
@@ -158,7 +169,7 @@ export async function render(root, ctx) {
   }
 
   draw();
-  const off = on('data', draw);
+  const off = on('data', () => { if (state.view !== 'plan') draw(); });
   const onResize = () => draw();
   const mq = window.matchMedia('(max-width: 700px)');
   mq.addEventListener('change', onResize);

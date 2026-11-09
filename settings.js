@@ -8,6 +8,7 @@ import { listsCard } from './lists.js';
 import { peopleCard } from './people.js';
 import { templatesCard } from './templates.js';
 import { dataCard } from './backups.js';
+import { googleCard } from './google.js';
 import { notificationsCard } from './notify-ui.js';
 import { storageCard } from './files.js';
 
@@ -38,7 +39,7 @@ function passwordCard() {
     form);
 }
 
-const SW_VERSION_LABEL = '7.0';
+const SW_VERSION_LABEL = '8.0';
 
 function aboutCard() {
   const btn = h('button', { class: 'btn btn-sm', type: 'button' }, icon('refresh'), t('about.check'));
@@ -72,7 +73,7 @@ export async function render(root, ctx) {
 
   root.append(h('section', { class: 'page page-narrow' },
     h('h1', { class: 'h1' }, t('settings.title')),
-    ctx.isAdmin ? h('nav', { class: 'jump', 'aria-label': t('settings.title') }, jump('profil'), jump('bildirim'), jump('people'), jump('listeler'), jump('sablonlar'), jump('veri')) : null,
+    ctx.isAdmin ? h('nav', { class: 'jump', 'aria-label': t('settings.title') }, jump('profil'), jump('bildirim'), jump('google'), jump('people'), jump('listeler'), jump('sablonlar'), jump('veri')) : null,
     h('div', { class: 'card', id: 'profil' },
       h('h2', { class: 'h2' }, t('settings.profile')),
       h('dl', { class: 'meta' },
@@ -84,6 +85,7 @@ export async function render(root, ctx) {
         h('div', { class: 'field' }, h('label', { for: 'set-theme' }, t('theme.label')), themeSel))),
     h('div', { id: 'bildirim' }, notificationsCard(ctx)),
     passwordCard(),
+    p.role !== 'viewer' ? googleCard(ctx) : null,
     ctx.isAdmin ? peopleCard(ctx) : null,
     ctx.isAdmin ? listsCard() : null,
     ctx.isAdmin ? templatesCard() : null,

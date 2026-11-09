@@ -218,7 +218,7 @@ async function startApp(session) {
     if (app.isAdmin && days >= 3) toast(t('inact.banner', { n: days }), { type: 'error', timeout: 15000 });
   });
   // Oturum belirteçleri adres çubuğunda kaldıysa temizle
-  if (/access_token|type=|error/.test(location.hash) || location.search.includes('code=')) {
+  if (/access_token|type=recovery|[#&]error=|error_code=/.test(location.hash) || location.search.includes('code=')) {
     history.replaceState(null, '', `${location.pathname}#${DEFAULT_ROUTE}`);
   }
   try {

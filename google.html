@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Evodak – Google bağlantısı</title>
+  <style>body{font-family:Arial,sans-serif;background:#EEF1F5;color:#1a2433;display:grid;place-items:center;min-height:100vh;margin:0}p{font-size:16px}</style>
+</head>
+<body>
+  <p>Google bağlantısı tamamlanıyor… / Finishing Google connection…</p>
+  <script>
+    // Google izin sayfasından dönüş: kodu panelin Ayarlar sayfasına (adres çubuğunun # kısmına) taşır.
+    // Kod adres çubuğunun ? kısmında kalırsa panelin giriş sistemi onu kendi kodu sanabilir.
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var out = new URLSearchParams();
+      ['code', 'state', 'error'].forEach(function (k) { if (q.get(k)) out.set('g_' + k, q.get(k)); });
+      location.replace('./#/ayarlar?' + out.toString());
+    })();
+  </script>
+</body>
+</html>

@@ -19,7 +19,7 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 | 5 | Tekrarlayan görevler, günlük özet, Bugün, Takvim, Projeler | ✅ |
 | 6 | Kişi ve rol yönetimi, şablonlar ve yeni proje, Excel'e aktarma, haftalık yedek, çöp kutusu, koyu tema, güncelleme uyarısı | ✅ |
 | 7 | Listeler, şablon önizleme ve tarih planlama, yorumlar, 4'lü erteleme, öncelikli işler, haftalık özet, yedekten geri yükleme, tüm cihazlardan çıkış, kullanılmama uyarısı | ✅ |
-| 8 | Gantt, zaman bloklama, Google ile giriş, Google Tasks | ⏳ |
+| 8 | Gantt, zaman bloklama (Plan), Google ile giriş, Google Tasks eşitleme | ✅ |
 
 ## Klasörler
 
@@ -27,16 +27,16 @@ Tüm dosyalar deponun ana dizinindedir (GitHub'a sürükle-bırak ile kolay yük
 
 - Arayüz: index.html, styles.css, config.js, i18n.js, xlsx.full.min.js
 - Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, task-detail.js, import.js, settings.js, today.js, calendar.js, projects.js
-- Ek: comments.js (yorumlar), lists.js (listeler), weekly.js (haftalık özet)
+- Ek: comments.js (yorumlar), lists.js (listeler), weekly.js (haftalık özet), gantt.js (Gantt), timeblock.js (Plan), google.js + google.html (Google Tasks)
 - Yönetim: people.js (kişiler), templates.js (şablonlar, yeni proje), export.js (Excel'e aktarma), trash.js (çöp kutusu), backups.js (veri ve yedek)
 - Dosyalar: files.js
 - Veri katmanı: store.js (otomatik kayıt, çakışma, Realtime), idb.js (çevrimdışı kopya ve kuyruk)
 - Bildirim: sw.js, push.js, notify-ui.js, manifest.webmanifest, simgeler (*.png)
-- Veritabanı: 001_schema.sql … 008_ek.sql (Supabase SQL Editor'de sırayla çalıştırılır)
-- Sunucu (Supabase Edge Functions, JWT doğrulama kapalı): send-reminders.ts, notification-action.ts, manage-users.ts, maintenance.ts
+- Veritabanı: 001_schema.sql … 009_google_plan.sql (Supabase SQL Editor'de sırayla çalıştırılır)
+- Sunucu (Supabase Edge Functions, JWT doğrulama kapalı): send-reminders.ts, notification-action.ts, manage-users.ts, maintenance.ts, google-tasks.ts
 
 ## Güvenlik
 
-- Gizli anahtarlar (service role, VAPID özel anahtarı) yalnızca Supabase'te durur; depoda ve tarayıcıda yoktur. `config.js`'teki anahtar herkese açık (publishable) anahtardır.
+- Gizli anahtarlar (service role, VAPID özel anahtarı, Google Client secret, Google yenileme anahtarları) yalnızca Supabase'te durur; depoda ve tarayıcıda yoktur. `config.js`'teki anahtar herkese açık (publishable) anahtardır.
 - Tüm tablolarda satır düzeyi güvenlik (RLS) açıktır. Dosya ve yedek depoları özeldir; bağlantılar kısa süreli imzalıdır.
 - Kişi yönetimi ve kalıcı silme sunucuda rol kontrolüyle yapılır.

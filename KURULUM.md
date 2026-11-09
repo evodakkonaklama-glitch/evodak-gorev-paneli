@@ -365,6 +365,67 @@ JWT ayarlarına dokunmayın (kapalı kalmalı).
 
 ---
 
+## PAKET 8 – Gantt, zaman bloklama, Google ile giriş, Google Tasks
+
+Gantt ve Plan (zaman bloklama) A–C adımlarından sonra hemen çalışır. Google ile giriş ve Google Tasks için ayrıca D–G adımları gerekir (yaklaşık 20 dakika, bir kez).
+
+### A. Supabase: SQL
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `009_google_plan.sql` dosyasının tamamını yapıştırın → **Run**. Altta dört satır görünmeli: `cleanup-notifications`, `google-tasks-sync`, `maintenance`, `send-reminders`.
+
+### B. Supabase: yeni fonksiyon
+1. **Edge Functions → Functions → Deploy a new function → Via Editor**.
+2. Adı tam olarak `google-tasks` yazın. Örnek kodu silin, `google-tasks.ts` içeriğini yapıştırın → **Deploy function**.
+3. **Details** sekmesi → **Enforce JWT verification** → **kapatın** → **Save changes**.
+
+### C. GitHub
+`evodak-gorev-paneli-paket8.zip` içindeki **tüm dosyaları** yükleyin. Yeni dosyalar: `gantt.js`, `timeblock.js`, `google.js`, `google.html`, `009_google_plan.sql`, `google-tasks.ts`.
+Bu noktada **Takvim → Gantt** ve **Takvim → Plan** çalışır.
+
+### D. Google Cloud: proje ve Tasks API
+1. https://console.cloud.google.com adresine evodak.konaklama@gmail.com (veya Hakan'ın hesabı) ile girin.
+2. Üstteki proje seçicisine tıklayın → **New project** (Yeni proje) → Ad: `Evodak Panel` → **Create**. Proje seçili olsun.
+3. Sol menü **APIs & Services → Library** (Kitaplık) → arama kutusuna `Google Tasks API` → çıkan karta tıklayın → **Enable** (Etkinleştir).
+
+### E. Google Cloud: izin ekranı (OAuth)
+1. Sol menü **Google Auth Platform** (bazı ekranlarda **APIs & Services → OAuth consent screen**) → **Get started**.
+2. **App name**: `Evodak Görev Paneli`, **User support email**: kendi e-postanız → **Next**.
+3. **Audience**: **External** → **Next** → **Contact information**: kendi e-postanız → **Next** → kutuyu işaretleyin → **Create**.
+4. Sol menü **Data access** → **Add or remove scopes** → listeden `.../auth/userinfo.email`, `openid` ve **Google Tasks API** satırındaki `.../auth/tasks` kutularını işaretleyin → **Update** → en altta **Save**.
+5. Sol menü **Audience** → **Publish app** → **Confirm**. Durum **In production** olmalı.
+   - Neden: "Testing" durumunda Google bağlantısı 7 günde bir kendiliğinden kopar.
+   - Uygulama Google tarafından doğrulanmadığı için ilk bağlanışta "Google bu uygulamayı doğrulamadı" uyarısı çıkar: **Gelişmiş (Advanced)** → **Evodak Görev Paneli'ne git** deyin. Ekip içi kullanımda bu normaldir; 100 kişiye kadar sorunsuz çalışır.
+
+### F. Google Cloud: istemci (Client ID ve Secret)
+1. Sol menü **Clients** (veya **Credentials → Create credentials → OAuth client ID**) → **Create client**.
+2. **Application type**: **Web application**, **Name**: `Evodak Panel`.
+3. **Authorized JavaScript origins** → **Add URI** → `https://evodakkonaklama-glitch.github.io`
+4. **Authorized redirect URIs** → **Add URI** ile iki adres ekleyin:
+   - `https://znmeghdcyrarfpkuxtvp.supabase.co/auth/v1/callback`
+   - `https://evodakkonaklama-glitch.github.io/evodak-gorev-paneli/google.html`
+5. **Create**. Çıkan pencerede **Client ID** ve **Client secret** değerlerini kopyalayın (Client secret'ı kimseyle paylaşmayın, sohbete de yazmayın).
+
+### G. Supabase: Google'ı açın ve anahtarları girin
+1. **Authentication → Sign In / Providers** (veya **Providers**) → **Google** → **Enable Sign in with Google** açık → **Client IDs** kutusuna Client ID, **Client Secret** kutusuna Client secret → **Save**.
+2. **Authentication → URL Configuration**:
+   - **Site URL**: `https://evodakkonaklama-glitch.github.io/evodak-gorev-paneli/`
+   - **Redirect URLs** → **Add URL** → aynı adres → **Save**.
+3. **Edge Functions → Secrets** → **Add new secret** ile iki satır:
+   | Name | Value |
+   |---|---|
+   | `GOOGLE_CLIENT_ID` | Client ID |
+   | `GOOGLE_CLIENT_SECRET` | Client secret |
+   → **Save**.
+
+### H. Deneyin
+- **Takvim → Gantt**: görevler proje gruplarında çubuk olarak görünür. Bilgisayarda çubuğu sürükleyin (iki tarih birlikte kayar) veya sağ ucundan çekin (bitiş değişir). **Haftalar / Aylar** ölçeği, **Yalnızca benimkiler**.
+- **Takvim → Plan**: soldaki "Planlanacak işler"den bir görevi saat sütununa sürükleyin; bloğa tıklayarak saat/süre değiştirin veya silin. Telefonda görevin yanındaki **+** ile gün ve saat seçin. Yönetici başka kişinin planını seçebilir.
+- Çıkış yapın → giriş ekranında **Google ile giriş yap**. Yalnızca panelde kayıtlı e-postalar girebilir (Hakan: hkgunsur@gmail.com, Gamze: evodak.konaklama@gmail.com).
+- **Ayarlar → Google Tasks → Google Tasks'a bağla** → Google hesabını seçin → izinleri onaylayın. Panele dönünce "Google Tasks bağlandı" yazar. Telefonda **Google Tasks** uygulamasında **Evodak Görevleri** listesi görünür.
+- Google Tasks'ta bir görevi tamamlayın → en geç 15 dakika sonra (veya **Şimdi eşitle**) panelde de tamamlanır.
+
+---
+
 ## Günlük kullanım (kısa)
 
 | Ne yapmak istiyorsunuz? | Nerede? |
@@ -372,7 +433,10 @@ JWT ayarlarına dokunmayın (kapalı kalmalı).
 | Bugün ne var, ne gecikti, öncelikli işler | **Bugün** |
 | Geçen hafta / bu hafta | **Bugün → Haftalık özet** |
 | Görev aramak, filtrelemek, Kanban | **Görevler** |
-| Tarihe göre görmek, tarih sürüklemek | **Takvim** |
+| Tarihe göre görmek, tarih sürüklemek | **Takvim** (Gün / Hafta / Ay) |
+| Proje zaman çizelgesi | **Takvim → Gantt** |
+| Günü saat saat planlamak | **Takvim → Plan** |
+| Google Tasks bağlantısı | **Ayarlar → Google Tasks** |
 | Proje durumu, yeni proje | **Projeler** |
 | Kişi ekleme, rol, şifre | **Ayarlar → Kişiler** |
 | Proje, bölüm, kategori listeleri | **Ayarlar → Listeler** |
@@ -388,6 +452,9 @@ JWT ayarlarına dokunmayın (kapalı kalmalı).
 - **Yedek alınmıyor:** Fonksiyon adı tam `maintenance` olmalı, JWT doğrulama kapalı olmalı. SQL Editor'de `select jobname from cron.job;` çalıştırınca `maintenance` görünmeli.
 - **Yeni sürüm görünmüyor:** Ctrl+F5. Telefonda uygulamayı tamamen kapatıp açın.
 - **Bildirim gelmiyor:** Ayarlar → Bildirimler → **Test bildirimi gönder**. 2. aşama G ve H adımlarına bakın.
+- **"Google bağlantısı henüz kurulmadı" uyarısı:** Paket 8 G adımındaki iki Secret eksik veya `google-tasks` fonksiyonu yüklenmemiş.
+- **Google ile girişte "redirect_uri_mismatch":** Paket 8 F-4'teki iki adres tam olarak (sonundaki / dahil) yazılmalı.
+- **Google ile giriş sonrası "Hesabınız ekibe eklenmemiş":** O e-posta Ayarlar → Kişiler'de kayıtlı değil.
 - Diğer her sorunda ekran görüntüsünü bana gönderin.
 
 ---
@@ -401,5 +468,6 @@ JWT ayarlarına dokunmayın (kapalı kalmalı).
 - **Supabase ücretsiz planı:** Proje 7 gün hiç kullanılmazsa duraklatılır; bu sürede bildirim gitmez. Panel her gün kullanılıyorsa sorun olmaz. Kesintisizlik için Pro plan (aylık 25 $) önerilir.
 - **E-posta:** E-posta bildirimleri sizin isteğinizle kapalıdır; tüm bildirimler telefon/bilgisayar bildirimi olarak gelir.
 - **Yedekler:** Son 8 yedek saklanır (yaklaşık 2 ay). Geri yükleme kişileri silmez; görevler, listeler, şablonlar ve yorumlar yedekteki hale döner. Yedekten sonra silinmiş dosyalar geri gelmez. Yedekler 1 GB dosya alanına dahildir; her biri yaklaşık 2 MB'tır.
+- **Google Tasks:** Yalnızca size **atanmış** açık görevler eşitlenir (sorumlusu boş görevler gönderilmez). Google'da yeni eklediğiniz görevler panele gelmez; yalnızca "tamamlandı" işareti panele yansır. Eşitleme 15 dakikada birdir.
 - **Kişi silme:** Kişiler silinmez, pasif yapılır; böylece görev geçmişindeki adı korunur.
 - **Hatırlatma zamanı:** Sunucu her dakika kontrol eder; bildirim zamanından en geç 1–2 dakika sonra gelir. Sunucu 60 dakikadan uzun süre çalışamazsa, o aralıkta kaçan hatırlatmalar sonradan gönderilmez.

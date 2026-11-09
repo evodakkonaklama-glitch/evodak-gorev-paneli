@@ -158,6 +158,7 @@ function subscribeRealtime() {
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'attachments' }, (p) => emit('attachments', p.new?.task_id || null))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'task_comments' }, (p) => emit('comments', p.new?.task_id || null))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'task_time_blocks' }, () => emit('blocks'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => refreshSmall('projects'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'lookups' }, () => refreshSmall('lookups'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => refreshSmall('profiles'))
