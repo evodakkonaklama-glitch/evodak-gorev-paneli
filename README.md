@@ -17,16 +17,23 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 | 3 | Görev ekranları, Kanban, otomatik kayıt, Realtime | ✅ |
 | 4 | Dosyalar | ✅ |
 | 5 | Tekrarlayan görevler, günlük özet, Bugün, Takvim, Projeler | ✅ |
-| 6 | Roller, şablonlar, dışa aktarma, yedek, PWA | ⏳ |
+| 6 | Kişi ve rol yönetimi, şablonlar ve yeni proje, Excel'e aktarma, haftalık yedek, çöp kutusu, koyu tema, güncelleme uyarısı | ✅ |
 
 ## Klasörler
 
 Tüm dosyalar deponun ana dizinindedir (GitHub'a sürükle-bırak ile kolay yükleme için alt klasör yoktur).
 
 - Arayüz: index.html, styles.css, config.js, i18n.js, xlsx.full.min.js
-- Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, task-detail.js, import.js, settings.js
+- Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, task-detail.js, import.js, settings.js, today.js, calendar.js, projects.js
+- Yönetim: people.js (kişiler), templates.js (şablonlar, yeni proje), export.js (Excel'e aktarma), trash.js (çöp kutusu), backups.js (veri ve yedek)
 - Dosyalar: files.js
 - Veri katmanı: store.js (otomatik kayıt, çakışma, Realtime), idb.js (çevrimdışı kopya ve kuyruk)
 - Bildirim: sw.js, push.js, notify-ui.js, manifest.webmanifest, simgeler (*.png)
-- Veritabanı: 001_schema.sql, 002_import.sql, 003_seed.sql, 004_bildirim.sql, 005_dosyalar.sql (Supabase SQL Editor'de sırayla çalıştırılır)
-- Sunucu (Supabase Edge Functions): send-reminders.ts, notification-action.ts
+- Veritabanı: 001_schema.sql … 007_son.sql (Supabase SQL Editor'de sırayla çalıştırılır)
+- Sunucu (Supabase Edge Functions, JWT doğrulama kapalı): send-reminders.ts, notification-action.ts, manage-users.ts, maintenance.ts
+
+## Güvenlik
+
+- Gizli anahtarlar (service role, VAPID özel anahtarı) yalnızca Supabase'te durur; depoda ve tarayıcıda yoktur. `config.js`'teki anahtar herkese açık (publishable) anahtardır.
+- Tüm tablolarda satır düzeyi güvenlik (RLS) açıktır. Dosya ve yedek depoları özeldir; bağlantılar kısa süreli imzalıdır.
+- Kişi yönetimi ve kalıcı silme sunucuda rol kontrolüyle yapılır.

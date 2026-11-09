@@ -1,6 +1,6 @@
 # Evodak Görev Paneli – Kurulum Rehberi
 
-Bu rehber teknik bilgi gerektirmez. Terminal kullanmanız gerekmez. Her aşamada yeni bölümler eklenecek.
+Bu rehber teknik bilgi gerektirmez. Terminal kullanmanız gerekmez. Panel 6 aşamada kuruldu; sonda **Günlük kullanım** ve **Sorun giderme** bölümleri var.
 
 - **Supabase projesi:** evodak-gorev (Frankfurt)
 - **GitHub deposu:** evodak-gorev-paneli
@@ -304,6 +304,63 @@ Bu aşamada Supabase'de yapılacak bir şey **yok**. Yalnızca GitHub'a dosya y�
 
 ---
 
+## 6. AŞAMA – Kişiler, şablonlar, veri ve yedek, tema
+
+### A. Supabase: son veritabanı kodunu çalıştırın
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `007_son.sql` dosyasının tamamını yapıştırın → **Run**.
+3. Altta üç satır görünmeli: `cleanup-notifications`, `maintenance`, `send-reminders`.
+
+### B. Supabase: iki yeni fonksiyon oluşturun
+Her biri için:
+1. **Edge Functions** → **Functions** → sağ üstte **Deploy a new function** → **Via Editor**.
+2. Sol üstteki işlev adını **tam olarak** yazın: önce `manage-users`, sonra `maintenance`.
+3. Editördeki örnek kodun **tamamını silin**, ilgili dosyanın (`manage-users.ts` / `maintenance.ts`) içeriğini yapıştırın → **Deploy function**.
+4. Açılan işlev sayfasında **Details** (veya **Settings**) sekmesi → **Enforce JWT verification** (Verify JWT) anahtarını **kapatın** → **Save changes**. (send-reminders'ta yaptığınızın aynısı. Fonksiyonlar kimin çağırdığını kendi içinde kontrol eder.)
+
+Yeni gizli değer gerekmez; fonksiyonlar Supabase'in kendi anahtarlarını kullanır.
+
+### C. GitHub: dosyaları yükleyin
+`evodak-gorev-paneli-asama6.zip` içindeki **tüm dosyaları** deponuza yükleyin (**Add file → Upload files → Commit changes**). Yeni dosyalar: `people.js`, `templates.js`, `export.js`, `trash.js`, `backups.js`, `007_son.sql`, `manage-users.ts`, `maintenance.ts`.
+Açık olan panel 1 saat içinde "Panelin yeni sürümü yüklendi – **Yenile**" uyarısı gösterir; hemen görmek için Ctrl+F5.
+
+### D. Deneyin
+- **Ayarlar → Kişiler → Kişi ekle:** ad, e-posta, rol yazın → geçici şifre otomatik üretilir → **Kişi ekle**. Çıkan "Giriş bilgileri" metnini **Kopyala** ile kişiye WhatsApp'tan gönderin. Kişi ilk girişte Ayarlar → Şifre'den kendi şifresini belirler.
+- Bir kişinin **rolünü** listeden değiştirin; **Şifre belirle** ile unuttuğu şifreyi yenileyin; ayrılan kişiyi **Pasif yap** ile kapatın (görevleri ve geçmişi silinmez).
+- **Ayarlar → Şablonlar:** Web / Panel / İş Planı şablon görevlerini açıp düzenleyin, sırasını oklarla değiştirin, yeni görev ekleyin.
+- **Projeler → Yeni proje:** ad ve tür seçin; "Şablondaki görevleri ekle" işaretliyse görevler ve adımları hazır gelir. Kartlardaki kalem simgesiyle proje adını değiştirin veya arşivleyin.
+- **Görevler → Excel'e aktar:** ekranda listelenen (filtrelenmiş) görevleri indirir. **Ayarlar → Veri ve yedek → Tüm görevleri Excel'e aktar** tümünü indirir. Dosya içe aktarma ekranıyla aynı biçimdedir.
+- **Ayarlar → Veri ve yedek → Şimdi yedek al:** birkaç saniye sonra listede bir yedek görünür; **Excel** veya **JSON** ile indirin. Bundan sonra her hafta kendiliğinden yedek alınır.
+- Bir görevi silin → **Ayarlar → Veri ve yedek → Çöp kutusu**: görev orada, **Geri yükle** ile geri gelir. 30 günden eski silinenler her gece kalıcı silinir. **Kalıcı sil** ve **Çöpü boşalt** yalnızca Hakan'da görünür.
+- **Ayarlar → Profil → Görünüm:** Açık / Koyu / Cihaza göre.
+
+---
+
+## Günlük kullanım (kısa)
+
+| Ne yapmak istiyorsunuz? | Nerede? |
+|---|---|
+| Bugün ne var, ne gecikti | **Bugün** |
+| Görev aramak, filtrelemek, Kanban | **Görevler** |
+| Tarihe göre görmek, tarih sürüklemek | **Takvim** |
+| Proje durumu, yeni proje | **Projeler** |
+| Kişi ekleme, rol, şifre | **Ayarlar → Kişiler** |
+| Şablon düzenleme | **Ayarlar → Şablonlar** |
+| Excel içe/dışa aktarma, yedek, çöp kutusu | **Ayarlar → Veri ve yedek** |
+| Bildirim saatleri, test bildirimi | **Ayarlar → Bildirimler** |
+
+**Roller:** Yönetici (owner, Hakan): her şey, kalıcı silme dahil. Yetkili (admin, Gamze): görev, proje, kişi, şablon yönetimi; Hakan'ın hesabına dokunamaz. Üye: kendisine atanan görevleri düzenler. İzleyici: yalnızca görür.
+
+## Sorun giderme
+
+- **"Sunucuya ulaşılamadı. manage-users…" uyarısı:** 6. aşama B adımı eksik. Fonksiyon adının tam `manage-users` olduğunu ve JWT doğrulamanın kapalı olduğunu kontrol edin.
+- **Yedek alınmıyor:** Fonksiyon adı tam `maintenance` olmalı, JWT doğrulama kapalı olmalı. SQL Editor'de `select jobname from cron.job;` çalıştırınca `maintenance` görünmeli.
+- **Yeni sürüm görünmüyor:** Ctrl+F5. Telefonda uygulamayı tamamen kapatıp açın.
+- **Bildirim gelmiyor:** Ayarlar → Bildirimler → **Test bildirimi gönder**. 2. aşama G ve H adımlarına bakın.
+- Diğer her sorunda ekran görüntüsünü bana gönderin.
+
+---
+
 ## Bilinen sınırlar
 
 - **Şifremi unuttum:** Supabase'in kendi e-posta servisi yalnızca Supabase hesabınızın ekibindeki adreslere posta gönderir, saatte de çok az e-posta gönderir. Bu yüzden (e-posta servisi kurulmadığı için) bu bağlantı kişiye ulaşmayabilir. Şifresini unutan kişiyi **Authentication → Users** ekranında silip aynı e-postayla yeniden ekleyin (B adımı). Profili, rolü ve görevleri etkilenmez; yeni hesap profile kendiliğinden bağlanır.
@@ -312,4 +369,6 @@ Bu aşamada Supabase'de yapılacak bir şey **yok**. Yalnızca GitHub'a dosya y�
 - **Bilgisayar:** Windows'ta Chrome/Edge'in "kapatıldığında arka planda çalışmaya devam et" ayarı açık olmalı. Mac'te Safari'nin "Dock'a Ekle" uygulaması kullanılmalı.
 - **Supabase ücretsiz planı:** Proje 7 gün hiç kullanılmazsa duraklatılır; bu sürede bildirim gitmez. Panel her gün kullanılıyorsa sorun olmaz. Kesintisizlik için Pro plan (aylık 25 $) önerilir.
 - **E-posta:** E-posta bildirimleri sizin isteğinizle kapalıdır; tüm bildirimler telefon/bilgisayar bildirimi olarak gelir.
+- **Yedekler:** Son 12 yedek saklanır (yaklaşık 3 ay). Yedekler 1 GB dosya alanına dahildir; her biri yaklaşık 2 MB'tır.
+- **Kişi silme:** Kişiler silinmez, pasif yapılır; böylece görev geçmişindeki adı korunur.
 - **Hatırlatma zamanı:** Sunucu her dakika kontrol eder; bildirim zamanından en geç 1–2 dakika sonra gelir. Sunucu 60 dakikadan uzun süre çalışamazsa, o aralıkta kaçan hatırlatmalar sonradan gönderilmez.

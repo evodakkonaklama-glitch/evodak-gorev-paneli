@@ -9,6 +9,7 @@ import * as settingsView from './settings.js';
 import * as todayView from './today.js';
 import * as calendarView from './calendar.js';
 import * as projectsView from './projects.js';
+import * as trashView from './trash.js';
 import { openDetail, closeDetail, isDetailOpen, setDetailBase } from './task-detail.js';
 import { registerServiceWorker, syncSubscription } from './push.js';
 import { bellButton, maybeShowPushPrompt, stopInboxChannel } from './notify-ui.js';
@@ -26,7 +27,8 @@ const ROUTES = {
   '/gorevler': { view: tasksView, nav: 'nav.tasks', icon: 'list' },
   '/takvim': { view: calendarView, nav: 'nav.calendar', icon: 'calendar' },
   '/projeler': { view: projectsView, nav: 'nav.projects', icon: 'folder' },
-  '/ice-aktar': { view: importView, nav: 'nav.import', icon: 'upload', admin: true },
+  '/ice-aktar': { view: importView, nav: 'nav.import', icon: 'upload', admin: true, hidden: true },
+  '/cop': { view: trashView, nav: 'trash.title', icon: 'trash', admin: true, hidden: true },
   '/ayarlar': { view: settingsView, nav: 'nav.settings', icon: 'settings' },
 };
 const DEFAULT_ROUTE = '/bugun';
@@ -79,11 +81,12 @@ async function route() {
 
 function renderTopbar(activePath) {
   topbar.hidden = false;
+  const navPath = ROUTES[activePath]?.hidden ? '/ayarlar' : activePath;
   const links = Object.entries(ROUTES)
-    .filter(([, r]) => !r.admin || app.isAdmin)
+    .filter(([, r]) => (!r.admin || app.isAdmin) && !r.hidden)
     .map(([path, r]) => h('a', {
-      href: `#${path}`, class: `nav-link ${path === activePath ? 'active' : ''}`,
-      'aria-current': path === activePath ? 'page' : null,
+      href: `#${path}`, class: `nav-link ${path === navPath ? 'active' : ''}`,
+      'aria-current': path === navPath ? 'page' : null,
     }, icon(r.icon), h('span', { class: 'nav-text' }, t(r.nav))));
 
   const langBtn = h('button', {
@@ -118,6 +121,31 @@ onStore('rollover', (r) => toast(t('rec.next', { date: fmtDate(r.next) }), { typ
 onStore('error', (err) => toast(`${t('save.error')}: ${friendlyError(err)}`, { type: 'error', timeout: 6000 }));
 onStore('conflict', (c) => { if (!location.hash.includes(c.id)) toast(t('conflict.toast'), { type: 'error', timeout: 8000, action: { label: t('conflict.open'), run: () => navigate(`/gorev/${c.id}`) } }); });
 
+// ---------------------------------------------------------------- tema
+const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+let themePref = (() => { try { return localStorage.getItem('evodak.theme') || 'system'; } catch { return 'system'; } })();
+function paintTheme() {
+  const dark = themePref === 'dark' || (themePref === 'system' && darkQuery?.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0f1b29' : '#14304D');
+}
+darkQuery?.addEventListener?.('change', paintTheme);
+export function applyTheme(pref) {
+  themePref = ['light', 'dark', 'system'].includes(pref) ? pref : 'system';
+  try { localStorage.setItem('evodak.theme', themePref); } catch { /* yok say */ }
+  paintTheme();
+}
+export function getTheme() { return themePref; }
+export async function switchTheme(pref) {
+  applyTheme(pref);
+  if (app.profile && app.profile.theme !== pref) {
+    app.profile.theme = pref;
+    const { error } = await supabase.from('profiles').update({ theme: pref }).eq('id', app.profile.id);
+    if (error) toast(friendlyError(error), { type: 'error' });
+  }
+}
+paintTheme();
+
 export async function switchLang(lang) {
   setLang(lang);
   if (app.profile && app.profile.language !== lang) {
@@ -151,6 +179,7 @@ async function startApp(session) {
   app.profile = profile;
   app.isAdmin = ['owner', 'admin'].includes(profile.role);
   if (profile.language && profile.language !== getLang()) setLang(profile.language);
+  if (profile.theme) applyTheme(profile.theme);
   supabase.rpc('touch_activity').then(({ error }) => { if (error) console.warn('touch_activity', error.message); });
   // Oturum belirteçleri adres çubuğunda kaldıysa temizle
   if (/access_token|type=|error/.test(location.hash) || location.search.includes('code=')) {
@@ -193,6 +222,18 @@ function hashErrorMessage() {
 // Service worker'dan gelen mesajlar: bildirime dokunuldu / bildirim düğmesiyle görev değişti
 function listenServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  // Yeni sürüm yüklendiğinde (GitHub'a yeni dosyalar konunca) kullanıcıya haber ver
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let notified = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || notified) return;
+    notified = true;
+    toast(t('app.update_ready'), { type: 'ok', timeout: 0, action: { label: t('app.reload'), run: async () => { await flushAllSafe(); location.reload(); } } });
+  });
+  // Açık kalan panel saatte bir ve ekrana dönüldüğünde yeni sürümü denetler
+  const check = () => navigator.serviceWorker.getRegistration('./').then((r) => r && r.update()).catch(() => {});
+  setInterval(check, 60 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
   navigator.serviceWorker.addEventListener('message', (e) => {
     const msg = e.data || {};
     if (msg.type === 'open' && msg.url) {
@@ -202,6 +243,10 @@ function listenServiceWorker() {
       import('./store.js').then((m) => m.reloadAll());
     }
   });
+}
+
+async function flushAllSafe() {
+  try { const m = await import('./store.js'); await m.flushAll(); } catch { /* yok say */ }
 }
 
 async function boot() {

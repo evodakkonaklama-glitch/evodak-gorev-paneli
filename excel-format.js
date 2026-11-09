@@ -492,3 +492,34 @@ export function buildPayload(parsed, diff) {
     templates: parsed.templates,
   };
 }
+
+// ---------- Dışa aktarma: içe aktarma ekranıyla aynı 18 sütun (geri yüklenebilir) ----------
+// data = { tasks, projects, profiles, checklist: Map(taskId -> [madde]), lookups }
+export function buildExportSheets(data) {
+  const projects = new Map(data.projects.map((p) => [p.id, p]));
+  const people = new Map(data.profiles.map((p) => [p.id, p]));
+  const rows = [...data.tasks].sort((a, b) => a.no - b.no).map((tk) => {
+    const items = data.checklist.get(tk.id) || [];
+    const rd = tk.recurrence === 'weekly' ? label('weekday', tk.recurrence_day) : (tk.recurrence_day || '');
+    return [
+      tk.no, projects.get(tk.project_id)?.name || '', tk.section || '', tk.category || '', tk.title,
+      buildDescription(tk.description || '', items), (tk.tags || []).join(', '),
+      label('status', tk.status), label('priority', tk.priority), `${tk.progress || 0}%`,
+      people.get(tk.assignee_id)?.full_name || '', formatDateTR(tk.start_date),
+      tk.due_date ? `${formatDateTR(tk.due_date)}${tk.due_time ? ` ${String(tk.due_time).slice(0, 5)}` : ''}` : '',
+      tk.estimate_minutes ?? '', label('recurrence', tk.recurrence), rd, label('reminder', tk.reminder),
+      (tk.reference_links || []).join('\n'),
+    ];
+  });
+  const usedPeople = data.profiles.filter((p) => p.active !== false || data.tasks.some((tk) => tk.assignee_id === p.id));
+  const peopleRows = usedPeople.map((p) => [p.full_name, p.email || '', label('role', p.role)]);
+  const sec = data.lookups.filter((x) => x.kind === 'section').map((x) => x.value);
+  const cat = data.lookups.filter((x) => x.kind === 'category').map((x) => x.value);
+  const prj = [...data.projects].sort((a, b) => a.sort_order - b.sort_order).map((p) => p.name);
+  const n = Math.max(sec.length, cat.length, prj.length);
+  return {
+    [SHEETS.tasks]: [TASK_COLUMNS, ...rows],
+    [SHEETS.people]: [['AD SOYAD', 'E-POSTA', 'ROL'], ...peopleRows],
+    [SHEETS.lists]: [['PROJE', 'BÖLÜM', 'KATEGORİ'], ...Array.from({ length: n }, (_, i) => [prj[i] || '', sec[i] || '', cat[i] || ''])],
+  };
+}

@@ -1,10 +1,11 @@
 // Görevler: liste (telefonda kart) ve Kanban; filtre, arama, sıralama, hızlı görünümler
-import { h, clear, icon, spinner } from './ui.js';
+import { h, clear, icon, spinner, toast } from './ui.js';
 import { t, getLang } from './i18n.js';
 import { label, searchFold } from './excel-format.js';
 import { fmtDate, fmtTime, dueInfo, todayIso, istanbulToDate } from './dates.js';
 import { store, on, setStatus, checklistCounts } from './store.js';
 import { openDetail, closeDetail, isDetailOpen, newTaskDialog } from './task-detail.js';
+import { exportTasks } from './export.js';
 
 export const STATUS_ORDER = ['todo', 'in_progress', 'waiting', 'blocked', 'done', 'cancelled'];
 const PRIORITY_ORDER = ['urgent', 'high', 'medium', 'low'];
@@ -149,7 +150,13 @@ export async function render(root, ctx) {
   page.append(
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', { class: 'h1' }, t('tasks.title')), count),
-      ctx.isAdmin ? h('button', { class: 'btn btn-primary hide-mobile', type: 'button', onclick: () => newTaskDialog(ctx) }, icon('plus'), t('tasks.new')) : null),
+      h('div', { class: 'row-gap' },
+        h('button', { class: 'btn', type: 'button', title: t('export.tasks_help'), onclick: () => {
+          const rows = sortTasks(applyFilters([...store.tasks.values()], ctx), new Map(store.projects.map((p, i) => [p.id, i])));
+          if (!rows.length) { toast(t('export.empty'), { type: 'error' }); return; }
+          exportTasks(rows);
+        } }, icon('download'), h('span', { class: 'hide-mobile' }, t('export.btn'))),
+        ctx.isAdmin ? h('button', { class: 'btn btn-primary hide-mobile', type: 'button', onclick: () => newTaskDialog(ctx) }, icon('plus'), t('tasks.new')) : null)),
     quickBar,
     h('div', { class: 'toolbar toolbar-3' }, h('div', { class: 'search-wrap' }, icon('search'), search), filterBtn, viewToggle),
     filterPanel,

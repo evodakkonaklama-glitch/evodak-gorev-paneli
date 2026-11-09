@@ -2,7 +2,7 @@
 // 1) Uygulama kapalıyken gelen bildirimi gösterir, bildirim düğmelerini oturumsuz çalıştırır,
 //    bildirime dokununca paneli ilgili görevde açar.
 // 2) Uygulama dosyalarını önbelleğe alır: internet yokken de panel açılır (veriler IndexedDB'den).
-const SW_VERSION = '5.0.0';
+const SW_VERSION = '6.0.0';
 const CACHE = `evodak-${SW_VERSION}`;
 // Herkese açık panel anahtarı (config.js ile aynı; gizli değildir).
 // Supabase işlev kapısı, bildirim düğmesi çağrısında bunu ister.
@@ -10,7 +10,7 @@ const PUBLIC_API_KEY = 'sb_publishable_eRXjy8MMFBk_k_AL1H4koQ_jHdJX9NU';
 const SHELL = [
   './', './index.html', './styles.css', './config.js', './i18n.js', './main.js', './supabase.js', './ui.js', './dates.js',
   './excel-format.js', './login.js', './tasks.js', './task-detail.js', './import.js', './settings.js', './push.js',
-  './notify-ui.js', './store.js', './idb.js', './files.js', './today.js', './calendar.js', './projects.js', './manifest.webmanifest', './icon-192.png', './badge-96.png', './xlsx.full.min.js',
+  './notify-ui.js', './store.js', './idb.js', './files.js', './today.js', './calendar.js', './projects.js', './people.js', './templates.js', './export.js', './trash.js', './backups.js', './manifest.webmanifest', './icon-192.png', './badge-96.png', './xlsx.full.min.js',
 ];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
 

@@ -39,6 +39,16 @@ export function clear(el) {
 // Sabit, güvenli SVG simgeler (kullanıcı verisi içermez)
 const ICONS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  save: '<path d="M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 3v5h8M8 21v-7h8v7"/>',
+  chevronUp: '<path d="M6 15l6-6 6 6"/>',
+  chevronDown: '<path d="M6 9l6 6 6-6"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 20a6 6 0 0 0-3-5.2"/>',
   circle: '<circle cx="12" cy="12" r="8"/>',
   play: '<circle cx="12" cy="12" r="8"/><path d="M10.5 9v6l4.5-3z" fill="currentColor"/>',
   pause: '<circle cx="12" cy="12" r="8"/><path d="M10 9v6M14 9v6"/>',

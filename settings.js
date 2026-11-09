@@ -1,9 +1,12 @@
-// Ayarlar – 1. aşama: profil, dil, şifre değiştirme, Excel içe aktarma bağlantısı, çıkış
+// Ayarlar: profil (dil, tema), bildirimler, şifre; owner/admin için kişiler, şablonlar, veri ve yedekler, dosya alanı
 import { h, icon, toast } from './ui.js';
 import { t, getLang } from './i18n.js';
 import { label } from './excel-format.js';
 import { supabase, friendlyError } from './supabase.js';
-import { switchLang, logout } from './main.js';
+import { switchLang, logout, switchTheme, getTheme } from './main.js';
+import { peopleCard } from './people.js';
+import { templatesCard } from './templates.js';
+import { dataCard } from './backups.js';
 import { notificationsCard } from './notify-ui.js';
 import { storageCard } from './files.js';
 
@@ -34,29 +37,57 @@ function passwordCard() {
     form);
 }
 
+const SW_VERSION_LABEL = '6.0';
+
+function aboutCard() {
+  const btn = h('button', { class: 'btn btn-sm', type: 'button' }, icon('refresh'), t('about.check'));
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration('./');
+      await reg?.update();
+      toast(reg?.installing || reg?.waiting ? t('app.update_ready') : t('about.latest'), { type: 'ok' });
+    } catch { toast(t('about.latest'), { type: 'ok' }); }
+    btn.disabled = false;
+  });
+  return h('div', { class: 'card' },
+    h('h2', { class: 'h2' }, t('about.title')),
+    h('p', { class: 'muted small' }, t('about.version', { v: SW_VERSION_LABEL })),
+    h('p', { class: 'muted small' }, t('about.install')),
+    btn);
+}
+
 export async function render(root, ctx) {
   const p = ctx.profile;
   const langSel = h('select', { id: 'set-lang', class: 'input' },
     h('option', { value: 'tr', selected: getLang() === 'tr' }, 'Türkçe'),
     h('option', { value: 'en', selected: getLang() === 'en' }, 'English'));
   langSel.addEventListener('change', () => switchLang(langSel.value));
+  const themeSel = h('select', { id: 'set-theme', class: 'input' },
+    ...['system', 'light', 'dark'].map((x) => h('option', { value: x, selected: getTheme() === x }, t(`theme.${x}`))));
+  themeSel.addEventListener('change', () => switchTheme(themeSel.value));
+
+  const jump = (id) => h('button', { class: 'chip chip-btn', type: 'button', onclick: () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, t(`settings.jump_${id}`));
 
   root.append(h('section', { class: 'page page-narrow' },
     h('h1', { class: 'h1' }, t('settings.title')),
-    h('div', { class: 'card' },
+    ctx.isAdmin ? h('nav', { class: 'jump', 'aria-label': t('settings.title') }, jump('profil'), jump('bildirim'), jump('people'), jump('sablonlar'), jump('veri')) : null,
+    h('div', { class: 'card', id: 'profil' },
       h('h2', { class: 'h2' }, t('settings.profile')),
       h('dl', { class: 'meta' },
         h('dt', {}, t('settings.name')), h('dd', {}, p.full_name),
         h('dt', {}, t('settings.email')), h('dd', {}, p.email || '—'),
         h('dt', {}, t('settings.role')), h('dd', {}, label('role', p.role, getLang()))),
-      h('div', { class: 'field mt' }, h('label', { for: 'set-lang' }, t('settings.language')), langSel)),
-    notificationsCard(ctx),
+      h('div', { class: 'grid-2 mt' },
+        h('div', { class: 'field' }, h('label', { for: 'set-lang' }, t('settings.language')), langSel),
+        h('div', { class: 'field' }, h('label', { for: 'set-theme' }, t('theme.label')), themeSel))),
+    h('div', { id: 'bildirim' }, notificationsCard(ctx)),
     passwordCard(),
+    ctx.isAdmin ? peopleCard(ctx) : null,
+    ctx.isAdmin ? templatesCard() : null,
+    ctx.isAdmin ? dataCard(ctx) : null,
     ctx.isAdmin ? storageCard() : null,
-    ctx.isAdmin ? h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, t('settings.data')),
-      h('a', { class: 'btn', href: '#/ice-aktar' }, icon('upload'), t('settings.import_excel'))) : null,
-    h('p', { class: 'muted small' }, t('settings.more_soon')),
+    aboutCard(),
     h('button', { class: 'btn btn-danger-outline', type: 'button', onclick: logout }, icon('logout'), t('settings.logout'))));
   return null;
 }
