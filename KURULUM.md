@@ -336,16 +336,47 @@ Açık olan panel 1 saat içinde "Panelin yeni sürümü yüklendi – **Yenile*
 
 ---
 
+## PAKET 7 – Eksik maddeler ve ek istekler
+
+### A. Supabase: SQL
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `008_ek.sql` dosyasının tamamını yapıştırın → **Run**. Altta **paket 7 kuruldu** yazmalı.
+
+### B. Supabase: iki fonksiyonu güncelleyin
+1. **Edge Functions → send-reminders → Code**: içindekini tamamen silin, `send-reminders.ts` içeriğini yapıştırın → **Deploy updates**.
+2. **Edge Functions → maintenance → Code**: aynı şekilde `maintenance.ts` içeriğiyle → **Deploy updates**.
+JWT ayarlarına dokunmayın (kapalı kalmalı).
+
+### C. GitHub
+`evodak-gorev-paneli-paket7.zip` içindeki **tüm dosyaları** yükleyin (**Add file → Upload files → Commit changes**). Yeni dosyalar: `comments.js`, `lists.js`, `weekly.js`, `008_ek.sql`.
+
+### D. Deneyin
+- **Bugün**: en üstte **Öncelikli işler** (Acil + Yüksek). Sağ üstte **Haftalık özet** düğmesi.
+- Bir görevi açın: **Ertele** → 10 dakika / 1 saat / Yarın 09:00 / Gelecek hafta. Bildirimde yine "Tamamlandı" ve "10 dk ertele" düğmeleri vardır (iPhone en fazla 2 düğme gösterir).
+- Görevin altında **Yorumlar**: yazın → **Gönder**. Görevin sorumlusunun zilinde bildirim çıkar.
+- **Ayarlar → Listeler**: Projeler (sıralama, düzenleme), Bölümler ve Kategoriler (ekle, yeniden adlandır, listeden çıkar, sırala).
+- **Ayarlar → Şablonlar**: **Günlük çalışma süresi** (varsayılan 4 saat).
+- **Projeler → Yeni proje**: başlangıç tarihi seçin → adımların listesi ve hesaplanan tarihleri görünür; istemediğiniz adımın işaretini kaldırın.
+- **Excel'e aktar**: dosya adı `Evodak_Gorevler_GG.AA.YYYY.xlsx`. Telefonda paylaşım menüsü açılır.
+- **Ayarlar → Veri ve yedek**: Hakan'da her yedeğin yanında **Geri yükle** (iki onay ister; önce şimdiki halin yedeği alınır). Son 8 yedek saklanır.
+- **Ayarlar** en altta **Tüm cihazlardan çıkış**. Panel 30 gün hiç açılmazsa oturum kendiliğinden kapanır.
+- Panel 3 gündür kimse tarafından açılmadıysa yöneticiye açılışta uyarı çıkar; 5 gün olunca her gün 10:00'da bildirim gelir.
+- Her pazartesi 09:00'da **Haftalık özet** bildirimi gelir; dokununca panelde ayrıntısı açılır.
+
+---
+
 ## Günlük kullanım (kısa)
 
 | Ne yapmak istiyorsunuz? | Nerede? |
 |---|---|
-| Bugün ne var, ne gecikti | **Bugün** |
+| Bugün ne var, ne gecikti, öncelikli işler | **Bugün** |
+| Geçen hafta / bu hafta | **Bugün → Haftalık özet** |
 | Görev aramak, filtrelemek, Kanban | **Görevler** |
 | Tarihe göre görmek, tarih sürüklemek | **Takvim** |
 | Proje durumu, yeni proje | **Projeler** |
 | Kişi ekleme, rol, şifre | **Ayarlar → Kişiler** |
-| Şablon düzenleme | **Ayarlar → Şablonlar** |
+| Proje, bölüm, kategori listeleri | **Ayarlar → Listeler** |
+| Şablon düzenleme, günlük çalışma süresi | **Ayarlar → Şablonlar** |
 | Excel içe/dışa aktarma, yedek, çöp kutusu | **Ayarlar → Veri ve yedek** |
 | Bildirim saatleri, test bildirimi | **Ayarlar → Bildirimler** |
 
@@ -369,6 +400,6 @@ Açık olan panel 1 saat içinde "Panelin yeni sürümü yüklendi – **Yenile*
 - **Bilgisayar:** Windows'ta Chrome/Edge'in "kapatıldığında arka planda çalışmaya devam et" ayarı açık olmalı. Mac'te Safari'nin "Dock'a Ekle" uygulaması kullanılmalı.
 - **Supabase ücretsiz planı:** Proje 7 gün hiç kullanılmazsa duraklatılır; bu sürede bildirim gitmez. Panel her gün kullanılıyorsa sorun olmaz. Kesintisizlik için Pro plan (aylık 25 $) önerilir.
 - **E-posta:** E-posta bildirimleri sizin isteğinizle kapalıdır; tüm bildirimler telefon/bilgisayar bildirimi olarak gelir.
-- **Yedekler:** Son 12 yedek saklanır (yaklaşık 3 ay). Yedekler 1 GB dosya alanına dahildir; her biri yaklaşık 2 MB'tır.
+- **Yedekler:** Son 8 yedek saklanır (yaklaşık 2 ay). Geri yükleme kişileri silmez; görevler, listeler, şablonlar ve yorumlar yedekteki hale döner. Yedekten sonra silinmiş dosyalar geri gelmez. Yedekler 1 GB dosya alanına dahildir; her biri yaklaşık 2 MB'tır.
 - **Kişi silme:** Kişiler silinmez, pasif yapılır; böylece görev geçmişindeki adı korunur.
 - **Hatırlatma zamanı:** Sunucu her dakika kontrol eder; bildirim zamanından en geç 1–2 dakika sonra gelir. Sunucu 60 dakikadan uzun süre çalışamazsa, o aralıkta kaçan hatırlatmalar sonradan gönderilmez.

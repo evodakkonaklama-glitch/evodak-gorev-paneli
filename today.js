@@ -3,7 +3,7 @@ import { h, clear, icon, spinner, toast } from './ui.js';
 import { t, getLang } from './i18n.js';
 import { store, on, setStatus } from './store.js';
 import { todayIso, addDays, fmtLong, fmtDate, fmtTime, dueInfo, istanbulToDate } from './dates.js';
-import { priorityBadge, canEdit } from './tasks.js';
+import { priorityBadge, canEdit, setTaskFilter } from './tasks.js';
 
 function stat(labelText, value, tone = '', iconName) {
   return h('div', { class: `stat ${tone}` },
@@ -64,9 +64,14 @@ export async function render(root, ctx) {
     const soon = open.filter((x) => x.due_date && x.due_date > today && x.due_date <= in3)
       .sort((a, b) => (`${a.due_date}${a.due_time}` < `${b.due_date}${b.due_time}` ? -1 : 1));
     const avg = all.length ? Math.round(all.reduce((s, x) => s + (x.progress || 0), 0) / all.length) : 0;
+    const prioRank = { urgent: 0, high: 1 };
+    const priority = open.filter((x) => x.priority === 'urgent' || x.priority === 'high')
+      .sort((a, b) => (prioRank[a.priority] - prioRank[b.priority]) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || a.no - b.no);
+    const PRIO_MAX = 8;
 
     clear(page).append(
-      h('div', { class: 'page-head' }, h('div', {}, h('h1', { class: 'h1' }, t('today.title')), h('p', { class: 'muted count' }, fmtLong(today, lang)))),
+      h('div', { class: 'page-head' }, h('div', {}, h('h1', { class: 'h1' }, t('today.title')), h('p', { class: 'muted count' }, fmtLong(today, lang))),
+        h('a', { class: 'btn', href: '#/haftalik' }, icon('chart'), t('wk.title'))),
       h('div', { class: 'stats stats-5' },
         stat(t('today.total'), all.length, '', 'list'),
         stat(t('today.done'), all.filter((x) => x.status === 'done').length, 'tone-green', 'check'),
@@ -74,6 +79,11 @@ export async function render(root, ctx) {
         stat(t('today.overdue'), overdue.length, overdue.length ? 'tone-red' : '', 'alert'),
         stat(t('today.avg'), `%${avg}`, '', 'chart')),
       h('div', { class: 'today-grid' },
+        h('section', { class: 'today-sec sec-amber' },
+          h('h2', { class: 'h3' }, t('today.sec_priority'), h('span', { class: 'quick-n' }, String(priority.length))),
+          priority.length ? h('ul', { class: 'today-list' }, priority.slice(0, PRIO_MAX).map(row)) : h('p', { class: 'muted small pad0' }, t('today.none_priority')),
+          priority.length > PRIO_MAX ? h('button', { class: 'btn btn-link', type: 'button', onclick: () => { setTaskFilter({ sort: 'priority', dir: 1, status: '' }); location.hash = '#/gorevler'; } },
+            t('today.priority_more', { n: priority.length - PRIO_MAX })) : null),
         section(t('today.sec_overdue'), overdue, 'sec-red', t('today.none_overdue')),
         section(t('today.sec_today'), todayList, '', t('today.none_today')),
         section(t('today.sec_recurring'), todayRec, '', t('today.none_recurring')),

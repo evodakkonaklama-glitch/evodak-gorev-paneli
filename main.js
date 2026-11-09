@@ -10,6 +10,7 @@ import * as todayView from './today.js';
 import * as calendarView from './calendar.js';
 import * as projectsView from './projects.js';
 import * as trashView from './trash.js';
+import * as weeklyView from './weekly.js';
 import { openDetail, closeDetail, isDetailOpen, setDetailBase } from './task-detail.js';
 import { registerServiceWorker, syncSubscription } from './push.js';
 import { bellButton, maybeShowPushPrompt, stopInboxChannel } from './notify-ui.js';
@@ -27,8 +28,9 @@ const ROUTES = {
   '/gorevler': { view: tasksView, nav: 'nav.tasks', icon: 'list' },
   '/takvim': { view: calendarView, nav: 'nav.calendar', icon: 'calendar' },
   '/projeler': { view: projectsView, nav: 'nav.projects', icon: 'folder' },
-  '/ice-aktar': { view: importView, nav: 'nav.import', icon: 'upload', admin: true, hidden: true },
-  '/cop': { view: trashView, nav: 'trash.title', icon: 'trash', admin: true, hidden: true },
+  '/ice-aktar': { view: importView, nav: 'nav.import', icon: 'upload', admin: true, hidden: '/ayarlar' },
+  '/cop': { view: trashView, nav: 'trash.title', icon: 'trash', admin: true, hidden: '/ayarlar' },
+  '/haftalik': { view: weeklyView, nav: 'wk.title', icon: 'chart', hidden: '/bugun' },
   '/ayarlar': { view: settingsView, nav: 'nav.settings', icon: 'settings' },
 };
 const DEFAULT_ROUTE = '/bugun';
@@ -81,7 +83,7 @@ async function route() {
 
 function renderTopbar(activePath) {
   topbar.hidden = false;
-  const navPath = ROUTES[activePath]?.hidden ? '/ayarlar' : activePath;
+  const navPath = ROUTES[activePath]?.hidden || activePath;
   const links = Object.entries(ROUTES)
     .filter(([, r]) => (!r.admin || app.isAdmin) && !r.hidden)
     .map(([path, r]) => h('a', {
@@ -159,7 +161,36 @@ export async function logout() {
   await supabase.auth.signOut();
 }
 
+// Tüm cihazlardan çıkış: bu hesabın bütün oturumları kapanır (telefon, bilgisayar)
+export async function logoutEverywhere() {
+  const { error } = await supabase.auth.signOut({ scope: 'global' });
+  if (error) { toast(friendlyError(error), { type: 'error' }); await supabase.auth.signOut({ scope: 'local' }); }
+}
+
+// Oturum zaman aşımı: panel 30 gün hiç açılmazsa bir sonraki açılışta yeniden giriş istenir
+const SESSION_IDLE_DAYS = 30;
+const ACTIVE_KEY = 'evodak.lastActive';
+function markActive() { try { localStorage.setItem(ACTIVE_KEY, String(Date.now())); } catch { /* yok say */ } }
+function sessionExpired() {
+  try {
+    const v = Number(localStorage.getItem(ACTIVE_KEY) || 0);
+    return v > 0 && Date.now() - v > SESSION_IDLE_DAYS * 86400000;
+  } catch { return false; }
+}
+let lastMark = 0;
+['pointerdown', 'keydown', 'visibilitychange'].forEach((ev) => document.addEventListener(ev, () => {
+  if (app.profile && Date.now() - lastMark > 60000) { lastMark = Date.now(); markActive(); }
+}, { passive: true }));
+
 async function startApp(session) {
+  if (sessionExpired()) {
+    try { localStorage.removeItem(ACTIVE_KEY); } catch { /* yok say */ }
+    started = false;
+    await supabase.auth.signOut({ scope: 'local' });
+    showLogin({ text: t('auth.session_expired'), type: 'error' });
+    return;
+  }
+  markActive();
   app.session = session;
   clear(main).append(spinner());
   let profile;
@@ -180,7 +211,12 @@ async function startApp(session) {
   app.isAdmin = ['owner', 'admin'].includes(profile.role);
   if (profile.language && profile.language !== getLang()) setLang(profile.language);
   if (profile.theme) applyTheme(profile.theme);
-  supabase.rpc('touch_activity').then(({ error }) => { if (error) console.warn('touch_activity', error.message); });
+  supabase.rpc('touch_activity_info').then(({ data, error }) => {
+    if (error) { supabase.rpc('touch_activity'); return; }   // 008 kurulmadıysa eski işlev
+    const prev = data?.previous ? new Date(data.previous).getTime() : 0;
+    const days = prev ? Math.floor((Date.now() - prev) / 86400000) : 0;
+    if (app.isAdmin && days >= 3) toast(t('inact.banner', { n: days }), { type: 'error', timeout: 15000 });
+  });
   // Oturum belirteçleri adres çubuğunda kaldıysa temizle
   if (/access_token|type=|error/.test(location.hash) || location.search.includes('code=')) {
     history.replaceState(null, '', `${location.pathname}#${DEFAULT_ROUTE}`);

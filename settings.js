@@ -1,9 +1,10 @@
 // Ayarlar: profil (dil, tema), bildirimler, şifre; owner/admin için kişiler, şablonlar, veri ve yedekler, dosya alanı
-import { h, icon, toast } from './ui.js';
+import { h, icon, toast, confirmDialog } from './ui.js';
 import { t, getLang } from './i18n.js';
 import { label } from './excel-format.js';
 import { supabase, friendlyError } from './supabase.js';
-import { switchLang, logout, switchTheme, getTheme } from './main.js';
+import { switchLang, logout, logoutEverywhere, switchTheme, getTheme } from './main.js';
+import { listsCard } from './lists.js';
 import { peopleCard } from './people.js';
 import { templatesCard } from './templates.js';
 import { dataCard } from './backups.js';
@@ -37,7 +38,7 @@ function passwordCard() {
     form);
 }
 
-const SW_VERSION_LABEL = '6.0';
+const SW_VERSION_LABEL = '7.0';
 
 function aboutCard() {
   const btn = h('button', { class: 'btn btn-sm', type: 'button' }, icon('refresh'), t('about.check'));
@@ -71,7 +72,7 @@ export async function render(root, ctx) {
 
   root.append(h('section', { class: 'page page-narrow' },
     h('h1', { class: 'h1' }, t('settings.title')),
-    ctx.isAdmin ? h('nav', { class: 'jump', 'aria-label': t('settings.title') }, jump('profil'), jump('bildirim'), jump('people'), jump('sablonlar'), jump('veri')) : null,
+    ctx.isAdmin ? h('nav', { class: 'jump', 'aria-label': t('settings.title') }, jump('profil'), jump('bildirim'), jump('people'), jump('listeler'), jump('sablonlar'), jump('veri')) : null,
     h('div', { class: 'card', id: 'profil' },
       h('h2', { class: 'h2' }, t('settings.profile')),
       h('dl', { class: 'meta' },
@@ -84,10 +85,16 @@ export async function render(root, ctx) {
     h('div', { id: 'bildirim' }, notificationsCard(ctx)),
     passwordCard(),
     ctx.isAdmin ? peopleCard(ctx) : null,
+    ctx.isAdmin ? listsCard() : null,
     ctx.isAdmin ? templatesCard() : null,
     ctx.isAdmin ? dataCard(ctx) : null,
     ctx.isAdmin ? storageCard() : null,
     aboutCard(),
-    h('button', { class: 'btn btn-danger-outline', type: 'button', onclick: logout }, icon('logout'), t('settings.logout'))));
+    h('div', { class: 'row-gap' },
+      h('button', { class: 'btn btn-danger-outline', type: 'button', onclick: logout }, icon('logout'), t('settings.logout')),
+      h('button', { class: 'btn', type: 'button', onclick: async () => {
+        if (await confirmDialog(t('settings.logout_all_confirm'), { confirmLabel: t('settings.logout_all'), danger: true })) logoutEverywhere();
+      } }, icon('logout'), t('settings.logout_all'))),
+    h('p', { class: 'muted small' }, t('settings.session_note'))));
   return null;
 }

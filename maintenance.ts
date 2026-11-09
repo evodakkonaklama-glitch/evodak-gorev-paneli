@@ -5,6 +5,8 @@
 //                       30 günü geçen çöpü kalıcı siler, haftada bir yedek alır.
 //   { mode: 'backup' }  Ayarlar > Yedekler > "Şimdi yedek al" (owner/admin oturumu)
 //   { mode: 'purge', task_ids? }  Çöp kutusu > "Kalıcı sil" / "Çöpü boşalt" (yalnızca owner)
+//   { mode: 'restore', backup_id } Ayarlar > Yedekler > "Geri yükle" (yalnızca owner, iki onay)
+//                       Önce güncel durumun yedeği alınır, sonra seçilen yedek geri yüklenir.
 // Yedek: tüm tablolar JSON + görevler Excel (içe aktarma ekranıyla geri yüklenebilir).
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
@@ -17,7 +19,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const TRASH_DAYS = 30;
-const KEEP_BACKUPS = 12;              // en yeni 12 yedek saklanır (~3 ay)
+const KEEP_BACKUPS = 8;               // en yeni 8 yedek saklanır (~2 ay)
 const WEEK_MS = 6.5 * 86400000;      // "son yedek bir haftadan eski mi?"
 
 function serviceKey(): string {
@@ -120,14 +122,18 @@ function buildWorkbook(d: Record<string, any[]>) {
 
 // ---------------------------------------------------------------- yedek
 async function backup(kind: 'weekly' | 'manual', by: string | null) {
-  const tables = ['profiles', 'projects', 'lookups', 'tasks', 'checklist_items', 'task_occurrences', 'attachments', 'task_templates', 'app_settings'];
+  const tables = ['profiles', 'projects', 'lookups', 'tasks', 'checklist_items', 'task_occurrences', 'attachments', 'task_comments', 'task_templates', 'app_settings'];
   // deno-lint-ignore no-explicit-any
   const data: Record<string, any[]> = {};
-  for (const t of tables) data[t] = await fetchAll(t, '*', t === 'app_settings' ? 'id' : 'created_at');
+  for (const t of tables) {
+    try { data[t] = await fetchAll(t, '*', t === 'app_settings' ? 'id' : 'created_at'); } catch (e) {
+      if (t === 'task_comments') data[t] = []; else throw e;   // eski kurulumda yorum tablosu yoksa
+    }
+  }
 
   const now = new Date();
   const ist = new Date(now.getTime() + 3 * 3600000).toISOString();   // Türkiye saati
-  const stamp = `${ist.slice(0, 10)}_${ist.slice(11, 13)}-${ist.slice(14, 16)}`;
+  const stamp = `${ist.slice(0, 10)}_${ist.slice(11, 13)}-${ist.slice(14, 16)}-${ist.slice(17, 19)}`;
   const base = `${ist.slice(0, 4)}/evodak-yedek-${stamp}${kind === 'manual' ? '-elle' : ''}`;
   const jsonBytes = new TextEncoder().encode(JSON.stringify({ app: 'evodak-gorev-paneli', version: 1, created_at: now.toISOString(), tables: data }));
   const xlsxBytes = buildWorkbook(data);
@@ -179,6 +185,19 @@ Deno.serve(async (req) => {
     if (body?.mode === 'backup') {
       if (!['owner', 'admin'].includes(me.role)) return json({ ok: false, error: 'forbidden' }, 403);
       return json({ ok: true, backup: await backup('manual', me.id) });
+    }
+    if (body?.mode === 'restore') {
+      if (me.role !== 'owner') return json({ ok: false, error: 'forbidden' }, 403);
+      const { data: b } = await db.from('backups').select('id,json_path,created_at').eq('id', String(body.backup_id ?? '')).maybeSingle();
+      if (!b) return json({ ok: false, error: 'not_found' }, 404);
+      const { data: file, error: dlErr } = await db.storage.from('backups').download(b.json_path);
+      if (dlErr || !file) return json({ ok: false, error: 'download_failed' }, 500);
+      const payload = JSON.parse(await file.text());
+      if (payload?.app !== 'evodak-gorev-paneli' || !payload.tables?.tasks) return json({ ok: false, error: 'bad_file' }, 400);
+      const safety = await backup('manual', me.id);   // geri dönüş için önce şimdiki hali yedekle
+      const { data: res, error: rErr } = await db.rpc('restore_backup', { p: payload, p_by: me.id });
+      if (rErr) return json({ ok: false, error: rErr.message, safety_backup: safety?.id }, 500);
+      return json({ ok: true, restored: res, from: b.created_at, safety_backup: safety?.id });
     }
     if (body?.mode === 'purge') {
       if (me.role !== 'owner') return json({ ok: false, error: 'forbidden' }, 403);

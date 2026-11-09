@@ -6,9 +6,11 @@ import { fmtDate, fmtDateTime, dueInfo } from './dates.js';
 import { supabase, friendlyError } from './supabase.js';
 import {
   store, on, updateTask, setStatus, hasPending, addItem, toggleItem, editItem, deleteItem, reorderItems,
-  deleteTask, restoreTask, snooze, createTask, resolveConflict, flushTask,
+  deleteTask, restoreTask, snoozeUntil, createTask, resolveConflict, flushTask,
 } from './store.js';
 import { attachmentsSection } from './files.js';
+import { commentsSection } from './comments.js';
+import { addDays, todayIso, istanbulToDate, startOfWeek } from './dates.js';
 
 let current = null;   // { id, el, offs[], returnFocus }
 let basePath = '/gorevler';
@@ -179,13 +181,7 @@ export function openDetail(id, ctx) {
     if (editable && !['done', 'cancelled'].includes(tk.status)) {
       actions.append(h('button', { class: 'btn btn-success', type: 'button', onclick: () => { setStatus(id, 'done'); toast(t('tasks.marked_done'), { type: 'ok' }); } }, icon('check'), t('tasks.mark_done')));
     }
-    if (!['done', 'cancelled'].includes(tk.status)) {
-      actions.append(h('button', { class: 'btn', type: 'button', onclick: async (e) => {
-        e.target.disabled = true;
-        try { await snooze(id); toast(t('tasks.snoozed'), { type: 'ok' }); } catch (err) { toast(friendlyError(err), { type: 'error' }); }
-        e.target.disabled = false;
-      } }, icon('clock'), t('tasks.snooze')));
-    }
+    if (!['done', 'cancelled'].includes(tk.status)) actions.append(snoozeMenu(id));
     if (ctx.isAdmin) {
       actions.append(h('button', { class: 'btn btn-danger-outline', type: 'button', onclick: removeTask }, icon('trash'), t('detail.delete')));
     }
@@ -293,6 +289,10 @@ export function openDetail(id, ctx) {
   // ---- dosyalar
   const files = attachmentsSection(id, ctx, editable);
   offs.push(files.destroy);
+
+  // ---- yorumlar
+  const comments = commentsSection(id, ctx);
+  offs.push(comments.destroy);
 
   // ---- değişiklik geçmişi
   const historyBox = h('div', { class: 'history' });
@@ -409,6 +409,7 @@ export function openDetail(id, ctx) {
       h('div', { class: 'field field-wide' },
         h('label', { for: refsCtl.el.id || (refsCtl.el.id = `refs-${id}`) }, t('tasks.references')),
         refsView, editable ? refsCtl.el : null, h('p', { class: 'muted small' }, t('detail.refs_help'))),
+      comments.el,
       historyDetails,
       metaLine,
       datalist('section', [...store.lookups.filter((l) => l.kind === 'section').map((l) => l.value), ...allTasks.map((x) => x.section)]),
@@ -452,6 +453,29 @@ function autoGrow(el) {
 }
 
 // ---------------------------------------------------------------- yeni görev
+// Erteleme: 10 dk, 1 saat, yarın 09:00, gelecek hafta (pazartesi 09:00). O zaman yeniden bildirim gelir.
+function snoozeMenu(id) {
+  const options = [
+    ['snz.10m', () => new Date(Date.now() + 10 * 60000)],
+    ['snz.1h', () => new Date(Date.now() + 60 * 60000)],
+    ['snz.tomorrow', () => istanbulToDate(addDays(todayIso(), 1), '09:00')],
+    ['snz.next_week', () => istanbulToDate(addDays(startOfWeek(todayIso()), 7), '09:00')],
+  ];
+  const menu = h('details', { class: 'snooze-menu' },
+    h('summary', { class: 'btn' }, icon('clock'), t('tasks.snooze_menu')),
+    h('div', { class: 'snooze-pop', role: 'menu' }, options.map(([key, at]) => h('button', {
+      type: 'button', role: 'menuitem', class: 'snooze-opt', onclick: async () => {
+        menu.open = false;
+        const when = at();
+        try {
+          await snoozeUntil(id, when);
+          toast(t('snz.done', { when: fmtDateTime(when.toISOString()) }), { type: 'ok' });
+        } catch (err) { toast(friendlyError(err), { type: 'error' }); }
+      } }, t(key)))));
+  menu.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menu.open) { e.stopPropagation(); menu.open = false; menu.querySelector('summary').focus(); } });
+  return menu;
+}
+
 export function newTaskDialog(ctx) {
   if (!ctx.isAdmin) return;
   const msg = h('p', { class: 'form-msg', role: 'alert' });

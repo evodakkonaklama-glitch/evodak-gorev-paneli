@@ -51,6 +51,10 @@ const TEXT = {
     open: 'Panelde aç', footer: 'Bu e-posta Evodak Görev Paneli tarafından gönderildi.',
     summaryTitle: 'Günlük özet',
     sumToday: (n: number) => `Bugün ${n} iş`, sumOverdue: (n: number) => `${n} geciken`, sumSoon: (n: number) => `3 gün içinde ${n}`,
+    weeklyTitle: 'Haftalık özet',
+    wkDone: (n: number) => `Geçen hafta ${n} tamamlandı`, wkOverdue: (n: number) => `${n} geciken`, wkThis: (n: number) => `Bu hafta ${n} iş`,
+    inactTitle: 'Panel uzun süredir kullanılmadı',
+    inactBody: (d: number) => `Panel ${d} gündür açılmadı. Supabase ücretsiz planı 7 gün kullanılmayan projeyi duraklatır; bildirimler durur. Paneli bir kez açmanız yeterli.`,
   },
   en: {
     done: 'Done', snooze: 'Snooze 10 min',
@@ -64,6 +68,10 @@ const TEXT = {
     open: 'Open in panel', footer: 'This email was sent by the Evodak Task Panel.',
     summaryTitle: 'Daily summary',
     sumToday: (n: number) => `${n} due today`, sumOverdue: (n: number) => `${n} overdue`, sumSoon: (n: number) => `${n} in next 3 days`,
+    weeklyTitle: 'Weekly summary',
+    wkDone: (n: number) => `${n} completed last week`, wkOverdue: (n: number) => `${n} overdue`, wkThis: (n: number) => `${n} due this week`,
+    inactTitle: 'Panel not used for a while',
+    inactBody: (d: number) => `The panel has not been opened for ${d} days. Supabase free plan pauses projects unused for 7 days and notifications stop. Opening the panel once is enough.`,
   },
 };
 type Lang = keyof typeof TEXT;
@@ -309,6 +317,52 @@ async function processSummary(profile: Profile, row: Row, subs: Sub[]) {
   else await finish([row.id], 'failed', results.map((x) => `${x.device ?? '?'}: ${x.status} ${x.error ?? ''}`).join(' | '));
 }
 
+// Haftalık özet: geçen hafta tamamlananlar, gecikenler, bu haftanın işleri (pazartesi 09:00)
+async function processWeekly(profile: Profile, row: Row, subs: Sub[]) {
+  const t = L(profile.language);
+  const now = new Date();
+  const ist = new Date(now.getTime() + 3 * 3600000);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const today = iso(ist);
+  const weekEnd = iso(new Date(ist.getTime() + 6 * 86400000));
+  const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
+  const sees = ['owner', 'admin'].includes(profile.role ?? '') && !profile.only_own_tasks;
+  const mine = `assignee_id.eq.${profile.id}${sees ? ',assignee_id.is.null' : ''}`;
+  const { data: open, error: e1 } = await db.from('tasks').select('id,title,due_date,due_time')
+    .is('deleted_at', null).not('status', 'in', '(done,cancelled)').or(mine).limit(3000);
+  if (e1) { await finish([row.id], 'failed', e1.message); return; }
+  // Tamamlananlar: tek seferlik görevler + tekrarlayan görevlerin tamamlanan tekrarları
+  const { count: doneTasks } = await db.from('tasks').select('id', { count: 'exact', head: true })
+    .is('deleted_at', null).eq('status', 'done').gte('completed_at', weekAgo).or(mine);
+  let occ = db.from('task_occurrences').select('id', { count: 'exact', head: true }).gte('completed_at', weekAgo);
+  if (!sees) occ = occ.eq('completed_by', profile.id);
+  const { count: doneOcc } = await occ;
+  const doneCount = (doneTasks ?? 0) + (doneOcc ?? 0);
+  const list = open ?? [];
+  const overdue = list.filter((x) => x.due_date && istanbulToDate(x.due_date, (x.due_time ?? '09:00').slice(0, 5)) < now).length;
+  const thisWeek = list.filter((x) => x.due_date && x.due_date >= today && x.due_date <= weekEnd).length;
+  if (!doneCount && !overdue && !thisWeek) { await finish([row.id], 'skipped', 'empty_week'); return; }
+  const body = [t.wkDone(doneCount), overdue ? t.wkOverdue(overdue) : '', t.wkThis(thisWeek)].filter(Boolean).join(' · ');
+  const payload = { title: t.weeklyTitle, body, url: `${APP_URL}#/haftalik`, tag: `weekly-${today}`, lang: profile.language, actions: [] };
+  if (row.attempts === 1) await db.from('inbox').insert({ profile_id: profile.id, kind: 'weekly_summary', title: t.weeklyTitle, body });
+  if (!subs.length) { await finish([row.id], 'skipped', 'no_subscription'); return; }
+  const results = await Promise.all(subs.map((s) => sendPush(s, payload)));
+  if (results.some((x) => x.ok)) await finish([row.id], 'sent');
+  else await finish([row.id], 'failed', results.map((x) => `${x.device ?? '?'}: ${x.status} ${x.error ?? ''}`).join(' | '));
+}
+
+// Kullanılmama uyarısı (owner/admin)
+async function processInactivity(profile: Profile, row: Row, subs: Sub[]) {
+  const t = L(profile.language);
+  const { data: st } = await db.from('app_settings').select('last_activity_at').eq('id', 1).maybeSingle();
+  const days = st?.last_activity_at ? Math.floor((Date.now() - new Date(st.last_activity_at).getTime()) / 86400000) : 5;
+  const payload = { title: t.inactTitle, body: t.inactBody(days), url: `${APP_URL}#/bugun`, tag: 'inactivity', lang: profile.language, actions: [] };
+  if (row.attempts === 1) await db.from('inbox').insert({ profile_id: profile.id, kind: 'inactivity', title: t.inactTitle, body: t.inactBody(days) });
+  if (!subs.length) { await finish([row.id], 'skipped', 'no_subscription'); return; }
+  const results = await Promise.all(subs.map((s) => sendPush(s, payload)));
+  await finish([row.id], results.some((x) => x.ok) ? 'sent' : 'failed');
+}
+
 async function runCron() {
   const { data: planned, error: planErr } = await db.rpc('plan_notifications');
   if (planErr) throw planErr;
@@ -332,7 +386,7 @@ async function runCron() {
   const skipped: string[] = [];
   const summaries: Row[] = [];
   for (const r of rows) {
-    if (r.kind === 'daily_summary') { if (profiles.has(r.profile_id)) summaries.push(r); else skipped.push(r.id); continue; }
+    if (['daily_summary', 'weekly_summary', 'inactivity'].includes(r.kind)) { if (profiles.has(r.profile_id)) summaries.push(r); else skipped.push(r.id); continue; }
     const task = r.task_id ? tasks.get(r.task_id) : null;
     if (!task || task.deleted_at || ['done', 'cancelled'].includes(task.status) || !profiles.has(r.profile_id)) skipped.push(r.id);
     else valid.push(r);
@@ -346,7 +400,11 @@ async function runCron() {
     const mail = mine.filter((r) => r.channel === 'email');
     if (push.length) await processPush(profile, push, tasks, subs);
     if (mail.length) await processEmail(profile, mail, tasks);
-    for (const r of summaries.filter((x) => x.profile_id === profile.id)) await processSummary(profile, r, subs);
+    for (const r of summaries.filter((x) => x.profile_id === profile.id)) {
+      if (r.kind === 'weekly_summary') await processWeekly(profile, r, subs);
+      else if (r.kind === 'inactivity') await processInactivity(profile, r, subs);
+      else await processSummary(profile, r, subs);
+    }
   }
   return { planned, processed: rows.length, skipped: skipped.length };
 }

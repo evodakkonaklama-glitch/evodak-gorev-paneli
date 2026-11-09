@@ -157,6 +157,7 @@ function subscribeRealtime() {
       scheduleSnapshot();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'attachments' }, (p) => emit('attachments', p.new?.task_id || null))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'task_comments' }, (p) => emit('comments', p.new?.task_id || null))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => refreshSmall('projects'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'lookups' }, () => refreshSmall('lookups'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => refreshSmall('profiles'))
@@ -378,8 +379,13 @@ export function checklistCounts(taskId) {
 
 // ---------------------------------------------------------------- erteleme
 export async function snooze(taskId, minutes = 10) {
+  return snoozeUntil(taskId, new Date(Date.now() + minutes * 60000));
+}
+
+// Hatırlatmayı belirli bir zamana ertele (o zaman yeniden bildirim gelir)
+export async function snoozeUntil(taskId, date) {
   const { error } = await supabase.from('notification_snoozes').insert({
-    task_id: taskId, profile_id: profileId, until: new Date(Date.now() + minutes * 60000).toISOString(),
+    task_id: taskId, profile_id: profileId, until: date.toISOString(),
   });
   if (error) throw error;
 }

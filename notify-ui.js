@@ -196,7 +196,8 @@ export function bellButton(ctx, navigate) {
       h('button', { type: 'button', onclick: async () => {
         if (!n.read_at) await supabase.from('inbox').update({ read_at: new Date().toISOString() }).eq('id', n.id);
         panel.hidden = true; refreshCount();
-        if (n.task_id) navigate(`/gorev/${n.task_id}`); else navigate('/ayarlar');
+        if (n.task_id) navigate(`/gorev/${n.task_id}`);
+        else navigate(n.kind === 'weekly_summary' ? '/haftalik' : n.kind === 'daily_summary' || n.kind === 'inactivity' ? '/bugun' : '/ayarlar');
       } }, h('span', { class: 'inbox-title' }, n.title), h('span', { class: 'muted small' }, n.body || ''),
         h('span', { class: 'muted small' }, fmtDateTime(n.created_at))))));
     panel.append(list);
