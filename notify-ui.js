@@ -120,8 +120,6 @@ export function notificationsCard(ctx) {
         (r.devices || []).forEach((d) => list.append(h('li', { class: d.ok ? 'ok' : 'bad' }, icon(d.ok ? 'check' : 'x'),
           `${d.device || '?'}: ${d.ok ? t('push.test_ok') : `${t('push.test_fail')} (${d.status}${d.error ? ` ${d.error.slice(0, 80)}` : ''})`}`)));
         if (!(r.devices || []).length) list.append(h('li', { class: 'bad' }, icon('x'), t('push.test_no_devices')));
-        if (r.email) list.append(h('li', { class: r.email.ok ? 'ok' : 'bad' }, icon(r.email.ok ? 'check' : 'x'),
-          r.email.ok ? t('push.test_email_ok') : `${t('push.test_email_fail')} (${r.email.status})`));
         testOut.append(list);
       } catch (err) { clear(testOut).append(h('p', { class: 'form-msg-error' }, friendlyError(err))); }
       e.target.disabled = false;
@@ -136,8 +134,6 @@ export function notificationsCard(ctx) {
       } }, t('push.remove')))));
     if (!(devices || []).length) devList.append(h('li', { class: 'muted' }, t('push.no_devices')));
 
-    const emailChk = h('input', { type: 'checkbox', id: 'n-email', checked: p.email_notifications });
-    emailChk.addEventListener('change', () => save({ email_notifications: emailChk.checked }));
     const timeInput = (id, val, field) => {
       const el = h('input', { type: 'time', id, class: 'input input-time', value: (val || '').slice(0, 5) });
       el.addEventListener('change', () => save({ [field]: el.value || null }));
@@ -153,8 +149,6 @@ export function notificationsCard(ctx) {
       actions, testOut,
       h('h3', { class: 'h3 mt' }, t('push.devices')), devList,
       h('h3', { class: 'h3 mt' }, t('push.prefs')),
-      h('label', { class: 'check', for: 'n-email' }, emailChk, t('push.email_too')),
-      h('p', { class: 'muted small' }, t('push.email_note', { email: p.email || '—' })),
       h('div', { class: 'grid-3' },
         h('div', { class: 'field' }, h('label', { for: 'n-sum' }, t('push.summary_time')), timeInput('n-sum', p.daily_summary_time, 'daily_summary_time')),
         h('div', { class: 'field' }, h('label', { for: 'n-qs' }, t('push.quiet_start')), timeInput('n-qs', p.quiet_hours_start, 'quiet_hours_start')),

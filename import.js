@@ -4,6 +4,7 @@ import { t } from './i18n.js';
 import { supabase, fetchAll, friendlyError } from './supabase.js';
 import { parseWorkbook, diffWithExisting, buildPayload, norm } from './excel-format.js';
 import { fmtDateTime } from './dates.js';
+import { reloadAll } from './store.js';
 
 const MAX_FILE = 10 * 1024 * 1024;
 const LIST_LIMIT = 100;
@@ -184,6 +185,7 @@ async function save(page, payload) {
   clear(page).append(spinner(t('import.saving')));
   const { data, error } = await supabase.rpc('import_excel', { p: payload });
   if (error) { fail(page, friendlyError(error)); return; }
+  await reloadAll();
   clear(page).append(
     h('div', { class: 'state' },
       icon('check', 'icon-lg tone-green-text'),
@@ -200,6 +202,7 @@ async function undo(page, batchId) {
   clear(page).append(spinner());
   const { data, error } = await supabase.rpc('undo_import', { p_batch: batchId });
   if (error) { fail(page, friendlyError(error)); return; }
+  await reloadAll();
   toast(t('import.undone', { del: data.deleted, res: data.restored }), { type: 'ok', timeout: 6000 });
   showStart(page);
 }

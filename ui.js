@@ -7,6 +7,7 @@ export function h(tag, attrs = {}, ...children) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === null || v === undefined || v === false) continue;
     if (k === 'class') el.className = v;
+    else if (k === 'value') el.value = v;
     else if (k === 'html') el.innerHTML = v; // yalnızca sabit SVG simgeler için kullanılır
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'dataset') Object.assign(el.dataset, v);
@@ -20,11 +21,20 @@ export function h(tag, attrs = {}, ...children) {
 function appendChildren(el, children) {
   for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    el.appendChild(c instanceof Node ? c : document.createTextNode(String(c)));
   }
 }
 
-export function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+// Öğeyi boşaltır. Dönen öğenin append'i boş (null/undefined/false) değerleri atlar,
+// böylece ekranda yanlışlıkla "null" yazısı çıkmaz.
+export function clear(el) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+  if (!el.__safeAppend) {
+    el.append = (...c) => { appendChildren(el, c); };
+    el.__safeAppend = true;
+  }
+  return el;
+}
 
 // Sabit, güvenli SVG simgeler (kullanıcı verisi içermez)
 const ICONS = {
@@ -51,6 +61,13 @@ const ICONS = {
   chevron: '<path d="M9 6l6 6-6 6"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   file: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  columns: '<rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/>',
+  filter: '<path d="M4 5h16l-6 8v5l-4 2v-7z"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  grip: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  history: '<path d="M4 12a8 8 0 102.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6M12 8v4l3 2"/>',
+  cloudOff: '<path d="M3 3l18 18"/><path d="M7 18h10a4 4 0 001.6-7.7A6 6 0 008 8.1M5.5 10.6A4 4 0 007 18"/>',
 };
 
 export function icon(name, cls = '') {

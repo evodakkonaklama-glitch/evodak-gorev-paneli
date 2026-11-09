@@ -152,7 +152,12 @@ Toplam süre yaklaşık 30 dakika; DNS doğrulaması ayrıca birkaç saat süreb
    - `config.js` bildirim anahtarıyla güncellendi; düzenlemenize gerek yok.
 2. 1–2 dakika sonra paneli açın. Sayfayı bir kez yenileyin (bilgisayarda Ctrl+F5).
 
-### F. Resend: alan adını doğrulayın (e-posta herkese gitsin diye)
+### F. ~~Resend: alan adını doğrulayın~~ — İPTAL (09.11.2026)
+
+> Kullanıcı kararıyla e-posta bildirimi kullanılmıyor. Bu adımı atlayın. Supabase Secrets'tan `RESEND_API_KEY` ve `MAIL_FROM` silinir; SQL: `update public.profiles set email_notifications = false;`
+
+<details><summary>Eski adımlar (ileride e-posta istenirse)</summary>
+
 
 O zamana kadar e-posta yedeği yalnızca `evodak.konaklama@gmail.com` adresine gidebilir; panel yine de çalışır.
 
@@ -177,6 +182,8 @@ O zamana kadar e-posta yedeği yalnızca `evodak.konaklama@gmail.com` adresine g
      - **Username:** `resend`
      - **Password:** Resend API anahtarı
      - **Save** deyin. Bundan sonra "Şifremi unuttum" herkese çalışır.
+
+</details>
 
 ### G. Cihazlarda bildirimleri açın
 
@@ -228,6 +235,29 @@ order by l.created_at desc limit 10;
 ```
 
 7. Test bitince test görevini silin: `delete from public.tasks where no = 9001;`
+
+---
+
+## 3. AŞAMA – Görev ekranları
+
+Bu aşamada Supabase'de yapılacak bir şey **yok**. Yalnızca GitHub'a dosya yüklenir.
+
+### A. GitHub: dosyaları yükleyin
+1. `evodak-gorev-paneli-asama3.zip` dosyasını ayıklayın.
+2. GitHub → **evodak-gorev-paneli** → **Add file → Upload files** → klasördeki **tüm dosyaları** (Ctrl+A) sürükleyin → **Commit changes**.
+   - Yeni dosyalar: `store.js`, `idb.js`, `task-detail.js`. Diğerleri güncellendi.
+3. 1–2 dakika sonra paneli açın ve **bir kez yenileyin**: bilgisayarda Ctrl+F5, iPhone'da paneli kapatıp yeniden açın.
+
+### B. Deneyin
+- **Liste/Kanban:** Görevler ekranında sağ üstteki iki düğmeyle görünüm değişir. Kanban'da kartı başka sütuna sürükleyince durum değişir.
+- **Hızlı görünümler:** Tümü · Bugün · Geciken · Bana atanan · Tamamlanan (sayılarıyla).
+- **Filtreler:** Proje, bölüm, kategori, durum, öncelik, sorumlu, etiket, bitiş tarihi aralığı. Sütun başlığına tıklayınca o sütuna göre sıralanır.
+- **Görev detayı:** Bir göreve tıklayın; sağdan panel açılır (telefonda tam ekran). Her alan **kendiliğinden kaydedilir**. Sağ üstte "Kaydediliyor… → Kaydedildi" görünür.
+- **Kontrol listesi:** Madde tikleyin, ekleyin, silin, ↑↓ ile ya da sürükleyerek sıralayın. İlerleme ve durum kendiliğinden değişir.
+- **Değişiklik geçmişi:** Detayın altında kim, ne zaman, neyi değiştirdi (eski → yeni).
+- **İki kişi aynı anda:** Gamze bir görevi değiştirdiğinde Hakan'ın ekranında birkaç saniye içinde görünür. İkisi aynı alanı aynı anda değiştirirse "Çakışma" uyarısı çıkar ve hangisinin kalacağı sorulur.
+- **Çevrimdışı:** İnternet yokken panel açılır, görevler okunur ve düzenlenir. Sağ üstte "Çevrimdışı, bağlanınca gönderilecek" yazar; bağlanınca değişiklikler sırayla gönderilir.
+- **Yeni görev:** "+ Yeni görev" (telefonda sağ alttaki büyük + düğmesi). **Sil:** onaylı; 8 saniye boyunca "Geri al" çıkar.
 
 ---
 

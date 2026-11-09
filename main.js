@@ -8,6 +8,8 @@ import * as importView from './import.js';
 import * as settingsView from './settings.js';
 import { registerServiceWorker, syncSubscription } from './push.js';
 import { bellButton, maybeShowPushPrompt, stopInboxChannel } from './notify-ui.js';
+import { store, loadAll, on as onStore, reset as resetStore } from './store.js';
+import { kv } from './idb.js';
 
 const main = document.getElementById('main');
 const topbar = document.getElementById('topbar');
@@ -24,6 +26,8 @@ const DEFAULT_ROUTE = '/gorevler';
 let cleanup = null;
 let started = false;
 let bell = null;
+let currentPath = null;
+let saveBadge = null;
 
 // '#/gorev/<id>' -> görevler sayfası, ilgili görev açık
 function parseRoute() {
@@ -42,9 +46,15 @@ async function route() {
   const { path, taskId } = parseRoute();
   const def = ROUTES[path];
   if (def.admin && !app.isAdmin) { navigate(DEFAULT_ROUTE); return; }
+  app.openTaskId = taskId;
+  // Aynı sayfada yalnızca görev açılıp kapanıyorsa sayfayı yeniden çizme
+  if (path === currentPath && typeof def.view.update === 'function' && main.firstChild) {
+    def.view.update(app);
+    return;
+  }
+  currentPath = path;
   if (typeof cleanup === 'function') cleanup();
   cleanup = null;
-  app.openTaskId = taskId;
   renderTopbar(path);
   clear(main);
   try {
@@ -73,13 +83,28 @@ function renderTopbar(activePath) {
   const logoutBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('nav.logout'), title: t('nav.logout'), onclick: logout }, icon('logout'));
 
   if (!bell) bell = bellButton(app, navigate);
+  if (!saveBadge) saveBadge = h('span', { class: 'save-status', role: 'status', 'aria-live': 'polite' });
+  drawSaveStatus();
 
   clear(topbar).append(
     h('a', { class: 'brand', href: `#${DEFAULT_ROUTE}` }, h('span', { class: 'logo-mark' }, 'E'), h('span', { class: 'brand-text' }, t('app.name'))),
     h('nav', { class: 'nav', 'aria-label': t('app.name') }, links),
     h('div', { class: 'topbar-right' },
-      h('span', { class: 'user-name' }, app.profile.full_name), bell.el, langBtn, logoutBtn));
+      saveBadge, h('span', { class: 'user-name' }, app.profile.full_name), bell.el, langBtn, logoutBtn));
 }
+
+function drawSaveStatus() {
+  if (!saveBadge) return;
+  const s = store.status;
+  const text = s === 'saving' ? t('save.saving') : s === 'offline' ? (store.queued ? t('save.offline_queued') : t('save.offline'))
+    : s === 'error' ? t('save.error') : t('save.saved');
+  saveBadge.className = `save-status save-${s}`;
+  clear(saveBadge).append(icon(s === 'error' ? 'alert' : s === 'offline' ? 'cloudOff' : s === 'saving' ? 'clock' : 'check'), h('span', { class: 'save-text' }, text));
+  saveBadge.title = text;
+}
+onStore('status', drawSaveStatus);
+onStore('error', (err) => toast(`${t('save.error')}: ${friendlyError(err)}`, { type: 'error', timeout: 6000 }));
+onStore('conflict', (c) => { if (!location.hash.includes(c.id)) toast(t('conflict.toast'), { type: 'error', timeout: 8000, action: { label: t('conflict.open'), run: () => navigate(`/gorev/${c.id}`) } }); });
 
 export async function switchLang(lang) {
   setLang(lang);
@@ -100,9 +125,10 @@ async function startApp(session) {
   let profile;
   try {
     profile = await loadMyProfile(session.user.id);
+    if (profile) kv.set(`profile:${session.user.id}`, profile);
   } catch (err) {
-    clear(main).append(errorState(friendlyError(err), () => startApp(session)));
-    return;
+    profile = await kv.get(`profile:${session.user.id}`);   // çevrimdışı: son bilinen profil
+    if (!profile) { clear(main).append(errorState(friendlyError(err), () => startApp(session))); return; }
   }
   if (!profile || !profile.active) {
     started = false;
@@ -118,6 +144,13 @@ async function startApp(session) {
   if (/access_token|type=|error/.test(location.hash) || location.search.includes('code=')) {
     history.replaceState(null, '', `${location.pathname}#${DEFAULT_ROUTE}`);
   }
+  try {
+    await loadAll(profile);
+  } catch (err) {
+    clear(main).append(errorState(friendlyError(err), () => startApp(session)));
+    return;
+  }
+  if (store.offlineData) toast(t('save.offline_data'), { type: 'error', timeout: 6000 });
   await route();
   syncSubscription();
   setTimeout(maybeShowPushPrompt, 600);
@@ -125,6 +158,8 @@ async function startApp(session) {
 
 function showLogin(message) {
   app.session = null; app.profile = null; app.isAdmin = false;
+  currentPath = null; saveBadge = null;
+  resetStore();
   if (bell) { bell.destroy(); bell = null; }
   stopInboxChannel();
   topbar.hidden = true;
@@ -152,7 +187,7 @@ function listenServiceWorker() {
       const hash = msg.url.includes('#') ? msg.url.slice(msg.url.indexOf('#')) : `#${DEFAULT_ROUTE}`;
       if (location.hash === hash) route(); else location.hash = hash;
     } else if (msg.type === 'refresh' && app.profile) {
-      route();
+      import('./store.js').then((m) => m.reloadAll());
     }
   });
 }
@@ -194,7 +229,7 @@ async function boot() {
 
   window.addEventListener('hashchange', () => { if (app.profile) route(); });
   onLangChange(() => {
-    if (app.profile) { if (bell) { bell.destroy(); bell = null; } route(); } else if (!app.session) showLogin();
+    if (app.profile) { if (bell) { bell.destroy(); bell = null; } currentPath = null; route(); } else if (!app.session) showLogin();
   });
   window.addEventListener('offline', () => toast(t('app.offline'), { type: 'error' }));
 }

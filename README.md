@@ -14,7 +14,7 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 |---|---|---|
 | 1 | Veritabanı, giriş, Excel içe aktarma, görev listesi | ✅ |
 | 2 | Bildirimler (uygulama kapalıyken) | ✅ |
-| 3 | Görev ekranları, Kanban, otomatik kayıt, Realtime | ⏳ |
+| 3 | Görev ekranları, Kanban, otomatik kayıt, Realtime | ✅ |
 | 4 | Dosyalar | ⏳ |
 | 5 | Tekrarlayan görevler, günlük özet, Bugün, Takvim, Projeler | ⏳ |
 | 6 | Roller, şablonlar, dışa aktarma, yedek, PWA | ⏳ |
@@ -24,7 +24,8 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 Tüm dosyalar deponun ana dizinindedir (GitHub'a sürükle-bırak ile kolay yükleme için alt klasör yoktur).
 
 - Arayüz: index.html, styles.css, config.js, i18n.js, xlsx.full.min.js
-- Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, import.js, settings.js
+- Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, task-detail.js, import.js, settings.js
+- Veri katmanı: store.js (otomatik kayıt, çakışma, Realtime), idb.js (çevrimdışı kopya ve kuyruk)
 - Bildirim: sw.js, push.js, notify-ui.js, manifest.webmanifest, simgeler (*.png)
 - Veritabanı: 001_schema.sql, 002_import.sql, 003_seed.sql, 004_bildirim.sql (Supabase SQL Editor'de sırayla çalıştırılır)
 - Sunucu (Supabase Edge Functions): send-reminders.ts, notification-action.ts
