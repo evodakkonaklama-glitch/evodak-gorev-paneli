@@ -50,7 +50,7 @@ const TEXT = {
     mailSubject: (t: string) => `Hatırlatma: ${t}`, mailGroupSubject: (n: number) => `${n} görev için hatırlatma`,
     open: 'Panelde aç', footer: 'Bu e-posta Evodak Görev Paneli tarafından gönderildi.',
     summaryTitle: 'Günlük özet',
-    sumToday: (n: number) => `Bugün ${n} iş`, sumOverdue: (n: number) => `${n} geciken`, sumSoon: (n: number) => `3 gün içinde ${n}`,
+    sumToday: (n: number) => `Bugün ${n} iş`, sumRec: (n: number) => `${n} tekrarlanan iş`, sumOverdue: (n: number) => `${n} geciken`, sumSoon: (n: number) => `3 gün içinde ${n}`,
     weeklyTitle: 'Haftalık özet',
     wkDone: (n: number) => `Geçen hafta ${n} tamamlandı`, wkOverdue: (n: number) => `${n} geciken`, wkThis: (n: number) => `Bu hafta ${n} iş`,
     inactTitle: 'Panel uzun süredir kullanılmadı',
@@ -67,7 +67,7 @@ const TEXT = {
     mailSubject: (t: string) => `Reminder: ${t}`, mailGroupSubject: (n: number) => `Reminder for ${n} tasks`,
     open: 'Open in panel', footer: 'This email was sent by the Evodak Task Panel.',
     summaryTitle: 'Daily summary',
-    sumToday: (n: number) => `${n} due today`, sumOverdue: (n: number) => `${n} overdue`, sumSoon: (n: number) => `${n} in next 3 days`,
+    sumToday: (n: number) => `${n} due today`, sumRec: (n: number) => `${n} recurring`, sumOverdue: (n: number) => `${n} overdue`, sumSoon: (n: number) => `${n} in next 3 days`,
     weeklyTitle: 'Weekly summary',
     wkDone: (n: number) => `${n} completed last week`, wkOverdue: (n: number) => `${n} overdue`, wkThis: (n: number) => `${n} due this week`,
     inactTitle: 'Panel not used for a while',
@@ -181,7 +181,7 @@ function mailHtml(lines: { title: string; sub: string; url: string }[], lang: st
 
 // ---------------------------------------------------------------- kuyruk işleme
 type Row = { id: string; task_id: string | null; profile_id: string; kind: string; channel: string; fire_at: string; attempts: number };
-type Task = { id: string; title: string; due_date: string | null; due_time: string | null; status: string; deleted_at: string | null; projects: { name: string } | null };
+type Task = { id: string; code?: string | null; title: string; due_date: string | null; due_time: string | null; status: string; deleted_at: string | null; projects: { name: string } | null };
 type Profile = { id: string; full_name: string; email: string | null; language: string; role?: string; only_own_tasks?: boolean };
 
 async function finish(ids: string[], status: 'sent' | 'failed' | 'skipped', error?: string) {
@@ -199,11 +199,24 @@ async function queueEmailFallback(rows: Row[]) {
   })), { onConflict: 'task_id,profile_id,kind,fire_at,channel', ignoreDuplicates: true });
 }
 
+// Supabase bir sorguda en fazla 1000 satır döndürür: 3000+ görevde sayfa sayfa oku
+// deno-lint-ignore no-explicit-any
+async function pagedSelect(build: () => any): Promise<{ data: any[]; error: { message: string } | null }> {
+  const out = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data, error } = await build().order('id').range(from, from + 999);
+    if (error) return { data: out, error };
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return { data: out, error: null };
+}
+
 function taskPayload(task: Task, lang: string, token: string) {
   const t = L(lang);
   return {
     title: task.title,
-    body: `${task.projects?.name ?? ''}\n${dueLine(task, lang)}`.trim(),
+    body: `${task.code ? `${task.code} · ` : ''}${task.projects?.name ?? ''}\n${dueLine(task, lang)}`.trim(),
     url: `${APP_URL}#/gorev/${task.id}`,
     tag: `task-${task.id}`,
     token,
@@ -289,19 +302,23 @@ async function processSummary(profile: Profile, row: Row, subs: Sub[]) {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const today = iso(ist);
   const in3 = iso(new Date(ist.getTime() + 3 * 86400000));
-  let q = db.from('tasks').select('id,title,due_date,due_time,start_date,status,assignee_id')
-    .is('deleted_at', null).not('status', 'in', '(done,cancelled)');
   const sees = ['owner', 'admin'].includes(profile.role ?? '') && !profile.only_own_tasks;
-  q = sees ? q.or(`assignee_id.eq.${profile.id},assignee_id.is.null`) : q.eq('assignee_id', profile.id);
-  const { data, error } = await q.limit(2000);
+  // Yalnızca özete girebilecek görevler (termin ≤ 3 gün sonra veya bugün başlayan); 1000'erli sayfalarla
+  const { data: list, error } = await pagedSelect(() => {
+    const q = db.from('tasks').select('id,title,due_date,due_time,start_date,status,assignee_id,recurrence')
+      .is('deleted_at', null).not('status', 'in', '(done,cancelled)')
+      .or(`due_date.lte.${in3},start_date.eq.${today}`);
+    return sees ? q.or(`assignee_id.eq.${profile.id},assignee_id.is.null`) : q.eq('assignee_id', profile.id);
+  });
   if (error) { await finish([row.id], 'failed', error.message); return; }
-  const list = data ?? [];
-  const overdue = list.filter((x) => x.due_date && istanbulToDate(x.due_date, (x.due_time ?? '09:00').slice(0, 5)) < now);
-  const todayList = list.filter((x) => (x.due_date === today || x.start_date === today) && !overdue.includes(x));
-  const soon = list.filter((x) => x.due_date && x.due_date > today && x.due_date <= in3);
-  if (!overdue.length && !todayList.length && !soon.length) { await finish([row.id], 'skipped', 'empty_day'); return; }
+  // Gecikme yalnızca tek seferlik görevlerde (tekrarlayan rutinler "bugün" listesine girer)
+  const overdue = list.filter((x) => x.recurrence === 'once' && x.due_date && istanbulToDate(x.due_date, (x.due_time ?? '09:00').slice(0, 5)) < now);
+  const todayList = list.filter((x) => (x.due_date === today || x.start_date === today) && !overdue.includes(x) && x.recurrence === 'once');
+  const recToday = list.filter((x) => x.recurrence !== 'once' && x.due_date && x.due_date <= today).length;
+  const soon = list.filter((x) => x.recurrence === 'once' && x.due_date && x.due_date > today && x.due_date <= in3);
+  if (!overdue.length && !todayList.length && !soon.length && !recToday) { await finish([row.id], 'skipped', 'empty_day'); return; }
 
-  const parts = [todayList.length ? t.sumToday(todayList.length) : '', overdue.length ? t.sumOverdue(overdue.length) : '', soon.length ? t.sumSoon(soon.length) : ''].filter(Boolean);
+  const parts = [todayList.length ? t.sumToday(todayList.length) : '', recToday ? t.sumRec(recToday) : '', overdue.length ? t.sumOverdue(overdue.length) : '', soon.length ? t.sumSoon(soon.length) : ''].filter(Boolean);
   const top = [...overdue, ...todayList].slice(0, 3).map((x) => `• ${x.title}`);
   const payload = {
     title: overdue.length ? `${t.summaryTitle} – ${t.sumOverdue(overdue.length)}` : t.summaryTitle,
@@ -328,8 +345,8 @@ async function processWeekly(profile: Profile, row: Row, subs: Sub[]) {
   const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
   const sees = ['owner', 'admin'].includes(profile.role ?? '') && !profile.only_own_tasks;
   const mine = `assignee_id.eq.${profile.id}${sees ? ',assignee_id.is.null' : ''}`;
-  const { data: open, error: e1 } = await db.from('tasks').select('id,title,due_date,due_time')
-    .is('deleted_at', null).not('status', 'in', '(done,cancelled)').or(mine).limit(3000);
+  const { data: open, error: e1 } = await pagedSelect(() => db.from('tasks').select('id,title,due_date,due_time,recurrence')
+    .is('deleted_at', null).not('status', 'in', '(done,cancelled)').lte('due_date', weekEnd).or(mine));
   if (e1) { await finish([row.id], 'failed', e1.message); return; }
   // Tamamlananlar: tek seferlik görevler + tekrarlayan görevlerin tamamlanan tekrarları
   const { count: doneTasks } = await db.from('tasks').select('id', { count: 'exact', head: true })
@@ -339,7 +356,7 @@ async function processWeekly(profile: Profile, row: Row, subs: Sub[]) {
   const { count: doneOcc } = await occ;
   const doneCount = (doneTasks ?? 0) + (doneOcc ?? 0);
   const list = open ?? [];
-  const overdue = list.filter((x) => x.due_date && istanbulToDate(x.due_date, (x.due_time ?? '09:00').slice(0, 5)) < now).length;
+  const overdue = list.filter((x) => x.recurrence === 'once' && x.due_date && istanbulToDate(x.due_date, (x.due_time ?? '09:00').slice(0, 5)) < now).length;
   const thisWeek = list.filter((x) => x.due_date && x.due_date >= today && x.due_date <= weekEnd).length;
   if (!doneCount && !overdue && !thisWeek) { await finish([row.id], 'skipped', 'empty_week'); return; }
   const body = [t.wkDone(doneCount), overdue ? t.wkOverdue(overdue) : '', t.wkThis(thisWeek)].filter(Boolean).join(' · ');
@@ -374,7 +391,7 @@ async function runCron() {
   const taskIds = [...new Set(rows.map((r) => r.task_id).filter(Boolean))] as string[];
   const profileIds = [...new Set(rows.map((r) => r.profile_id))];
   const [{ data: taskData }, { data: profData }, { data: subData }] = await Promise.all([
-    db.from('tasks').select('id,title,due_date,due_time,status,deleted_at,projects(name)').in('id', taskIds.length ? taskIds : ['00000000-0000-0000-0000-000000000000']),
+    db.from('tasks').select('id,code,title,due_date,due_time,status,deleted_at,projects(name)').in('id', taskIds.length ? taskIds : ['00000000-0000-0000-0000-000000000000']),
     db.from('profiles').select('id,full_name,email,language,role,only_own_tasks').in('id', profileIds),
     db.from('push_subscriptions').select('id,endpoint,p256dh,auth,device_name,profile_id,failure_count').in('profile_id', profileIds),
   ]);

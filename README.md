@@ -20,6 +20,7 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 | 6 | Kişi ve rol yönetimi, şablonlar ve yeni proje, Excel'e aktarma, haftalık yedek, çöp kutusu, koyu tema, güncelleme uyarısı | ✅ |
 | 7 | Listeler, şablon önizleme ve tarih planlama, yorumlar, 4'lü erteleme, öncelikli işler, haftalık özet, yedekten geri yükleme, tüm cihazlardan çıkış, kullanılmama uyarısı | ✅ |
 | 8 | Gantt, zaman bloklama (Plan), Google ile giriş, Google Tasks eşitleme | ✅ |
+| 9 | ERA Excel uyarlaması: görev kodu (ID), direktörlük, adet/sıklık, yıllık iş yükü, Özet ekranı, 25 sütun içe/dışa aktarma, toplu işlem, gruplama, 3.000+ görevde hızlı liste | ✅ |
 
 ## Klasörler
 
@@ -27,12 +28,12 @@ Tüm dosyalar deponun ana dizinindedir (GitHub'a sürükle-bırak ile kolay yük
 
 - Arayüz: index.html, styles.css, config.js, i18n.js, xlsx.full.min.js
 - Uygulama: main.js, supabase.js, ui.js, dates.js, excel-format.js, login.js, tasks.js, task-detail.js, import.js, settings.js, today.js, calendar.js, projects.js
-- Ek: comments.js (yorumlar), lists.js (listeler), weekly.js (haftalık özet), gantt.js (Gantt), timeblock.js (Plan), google.js + google.html (Google Tasks)
+- Ek: summary.js (Özet), comments.js (yorumlar), lists.js (listeler), weekly.js (haftalık özet), gantt.js (Gantt), timeblock.js (Plan), google.js + google.html (Google Tasks)
 - Yönetim: people.js (kişiler), templates.js (şablonlar, yeni proje), export.js (Excel'e aktarma), trash.js (çöp kutusu), backups.js (veri ve yedek)
 - Dosyalar: files.js
 - Veri katmanı: store.js (otomatik kayıt, çakışma, Realtime), idb.js (çevrimdışı kopya ve kuyruk)
 - Bildirim: sw.js, push.js, notify-ui.js, manifest.webmanifest, simgeler (*.png)
-- Veritabanı: 001_schema.sql … 009_google_plan.sql (Supabase SQL Editor'de sırayla çalıştırılır)
+- Veritabanı: 001_schema.sql … 010_era.sql (Supabase SQL Editor'de sırayla çalıştırılır)
 - Sunucu (Supabase Edge Functions, JWT doğrulama kapalı): send-reminders.ts, notification-action.ts, manage-users.ts, maintenance.ts, google-tasks.ts
 
 ## Güvenlik

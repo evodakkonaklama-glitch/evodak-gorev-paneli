@@ -1,4 +1,4 @@
-// Ayarlar > Listeler (owner/admin): Proje sırası, Bölüm ve Kategori listeleri (ekle / yeniden adlandır / çıkar / sırala)
+// Ayarlar > Listeler (owner/admin): Proje sırası, Direktörlük, Alt Birim ve Görev / Fonksiyon listeleri (ekle / yeniden adlandır / çıkar / sırala)
 // Bölüm/kategori adını değiştirmek o adı taşıyan görevleri ve şablonları da günceller.
 // Listeden çıkarmak görevleri değiştirmez; yalnızca seçim listesinden kalkar.
 import { h, icon, toast, clear, confirmDialog } from './ui.js';
@@ -8,10 +8,12 @@ import { supabase } from './supabase.js';
 import { store, reloadAll, on } from './store.js';
 import { newProjectDialog, editProjectDialog } from './templates.js';
 
-const KINDS = ['project', 'section', 'category'];
+const KINDS = ['project', 'directorate', 'section', 'category'];
+const FIELD = { directorate: 'directorate', section: 'section', category: 'category' };
 
 export function listsCard() {
   let kind = 'project';
+  let filter = '';
   const tabs = h('div', { class: 'seg', role: 'tablist', 'aria-label': t('lists.title') });
   const body = h('div', { class: 'lists-body' });
   const card = h('div', { class: 'card', id: 'listeler' },
@@ -22,11 +24,11 @@ export function listsCard() {
   function drawTabs() {
     clear(tabs).append(...KINDS.map((k) => h('button', {
       type: 'button', role: 'tab', class: `seg-btn ${k === kind ? 'active' : ''}`, 'aria-selected': String(k === kind),
-      onclick: () => { kind = k; drawTabs(); draw(); },
+      onclick: () => { kind = k; filter = ''; drawTabs(); draw(); },
     }, t(`lists.${k}`))));
   }
 
-  const usage = (k, value) => [...store.tasks.values()].filter((x) => (k === 'section' ? x.section : x.category) === value).length;
+  const usage = (k, value) => [...store.tasks.values()].filter((x) => x[FIELD[k]] === value).length;
 
   async function move(rows, i, dir, table) {
     const j = i + dir;
@@ -58,7 +60,11 @@ export function listsCard() {
   }
 
   function drawLookups() {
-    const rows = store.lookups.filter((l) => l.kind === kind).sort((a, b) => a.sort_order - b.sort_order);
+    const all = store.lookups.filter((l) => l.kind === kind).sort((a, b) => a.sort_order - b.sort_order);
+    const f = filter.toLocaleLowerCase('tr');
+    const rows = f ? all.filter((r) => r.value.toLocaleLowerCase('tr').includes(f)) : all;
+    const search = all.length > 15 ? h('input', { class: 'input input-sm', type: 'search', value: filter, placeholder: t('lists.search', { n: all.length }), 'aria-label': t('lists.search', { n: all.length }) }) : null;
+    search?.addEventListener('input', () => { filter = search.value; draw(); const el = body.querySelector('input[type=search]'); el?.focus(); el?.setSelectionRange(filter.length, filter.length); });
     const input = h('input', { class: 'input', id: 'lst-new', placeholder: t('lists.new_ph'), autocomplete: 'off' });
     const add = h('form', { class: 'row-gap mt' }, h('label', { class: 'sr-only', for: 'lst-new' }, t('lists.new_ph')), input,
       h('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), t('lists.add')));
@@ -66,8 +72,8 @@ export function listsCard() {
       e.preventDefault();
       const v = input.value.trim();
       if (!v) return;
-      if (rows.some((r) => r.value.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr'))) { toast(t('lists.exists'), { type: 'error' }); return; }
-      const { error } = await supabase.from('lookups').insert({ kind, value: v, sort_order: rows.length + 1 });
+      if (all.some((r) => r.value.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr'))) { toast(t('lists.exists'), { type: 'error' }); return; }
+      const { error } = await supabase.from('lookups').insert({ kind, value: v, sort_order: all.length + 1 });
       if (error) { toast(t('tpl.err'), { type: 'error' }); return; }
       input.value = '';
       await reloadAll();
@@ -75,10 +81,11 @@ export function listsCard() {
     });
 
     clear(body).append(
+      search,
       rows.length ? h('ul', { class: 'list-rows' }, rows.map((r, i) => {
         const n = usage(kind, r.value);
         return h('li', { class: 'list-row' },
-          h('span', { class: 'list-name' }, r.value),
+          h('span', { class: 'list-name' }, r.value, kind === 'section' && r.parent ? h('span', { class: 'muted small' }, ` · ${r.parent}`) : null),
           h('span', { class: 'muted small' }, t('lists.used', { n })),
           h('button', { class: 'icon-btn icon-btn-sm', type: 'button', title: t('lists.rename'), 'aria-label': `${t('lists.rename')}: ${r.value}`, onclick: () => renameDialog(r, n) }, icon('edit')),
           h('button', { class: 'icon-btn icon-btn-sm', type: 'button', title: t('lists.remove'), 'aria-label': `${t('lists.remove')}: ${r.value}`, onclick: async () => {
@@ -87,7 +94,7 @@ export function listsCard() {
             if (error) { toast(t('tpl.err'), { type: 'error' }); return; }
             await reloadAll();
           } }, icon('trash')),
-          moveBtns(rows, i, 'lookups'));
+          f ? null : moveBtns(rows, i, 'lookups'));
       })) : h('p', { class: 'muted' }, t('lists.empty')),
       add);
   }

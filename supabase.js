@@ -47,7 +47,9 @@ export function friendlyError(error) {
 export async function fetchAll(buildQuery, pageSize = 1000) {
   const rows = [];
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    // Sayfalar arasında satır kaymasın diye her sorgu sonunda benzersiz "id" sırası da eklenir
+    // (aynı anda eklenen binlerce satırın sıralama değeri eşit olabilir)
+    const { data, error } = await buildQuery().order('id', { ascending: true }).range(from, from + pageSize - 1);
     if (error) throw error;
     rows.push(...data);
     if (data.length < pageSize) return rows;

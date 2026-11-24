@@ -1,15 +1,22 @@
-// Excel içe aktarma: dosya seç → önizleme → onay → kaydet → (isterseniz) geri al
+// Excel içe aktarma: dosya seç → önizleme → onay → (yedek) → parça parça kaydet → (isterseniz) geri al
+// ERA "Görev Takip" (25 sütun) ve eski 18 sütunlu dosya okunur; görevler ID (kod) ile eşlenir.
 import { h, clear, icon, spinner, toast, confirmDialog } from './ui.js';
 import { t } from './i18n.js';
 import { supabase, fetchAll, friendlyError } from './supabase.js';
-import { parseWorkbook, diffWithExisting, buildPayload, norm } from './excel-format.js';
+import { parseWorkbook, diffWithExisting, buildPayloadChunks, norm, personMatcher, label } from './excel-format.js';
+import { getLang } from './i18n.js';
 import { fmtDateTime } from './dates.js';
 import { reloadAll } from './store.js';
+import { callFn } from './people.js';
 
-const MAX_FILE = 10 * 1024 * 1024;
+const MAX_FILE = 15 * 1024 * 1024;
 const LIST_LIMIT = 100;
+const CHUNK = 500;
+
+let ctxRef = null;
 
 export async function render(root, ctx) {
+  ctxRef = ctx;
   const page = h('section', { class: 'page page-narrow' });
   root.append(page);
   if (!ctx.isAdmin) {
@@ -19,6 +26,8 @@ export async function render(root, ctx) {
   await showStart(page);
   return null;
 }
+
+const isOwner = () => ctxRef?.profile?.role === 'owner';
 
 async function showStart(page) {
   clear(page);
@@ -77,7 +86,9 @@ async function handleFile(page, file) {
 
     clear(page).append(spinner(t('import.comparing')));
     const existing = await loadExisting(projects, profiles);
-    const diff = diffWithExisting(parsed, existing);
+    // Excel'deki "Hakan" ile paneldeki "Hakan Günsür" aynı kişi sayılır
+    const matches = (excelName, fullName) => Boolean(fullName) && personMatcher([fullName])(excelName);
+    const diff = diffWithExisting(parsed, existing, matches);
     showPreview(page, parsed, diff, { profiles, projects, templatesExist: (tplCount.count || 0) > 0 });
   } catch (err) {
     console.error(err);
@@ -90,7 +101,7 @@ async function loadExisting(projects, profiles) {
   const personName = new Map(profiles.map((p) => [p.id, p.full_name]));
   const [tasks, items] = await Promise.all([
     fetchAll(() => supabase.from('tasks')
-      .select('id,no,project_id,section,category,title,description,tags,status,priority,assignee_id,start_date,due_date,estimate_minutes,recurrence,recurrence_day,reminder,reference_links,deleted_at')
+      .select('id,no,code,project_id,directorate,section,category,title,description,tags,status,priority,progress,assignee_id,start_date,due_date,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,reference_links,deleted_at')
       .order('no')),
     fetchAll(() => supabase.from('checklist_items').select('task_id,text,note,done,sort_order').order('task_id').order('sort_order')),
   ]);
@@ -130,27 +141,56 @@ function table(headers, rows) {
     rows.length > LIST_LIMIT ? h('p', { class: 'muted small' }, t('import.more', { n: rows.length - LIST_LIMIT })) : null);
 }
 
+function checkbox(text, hint, checked = false) {
+  const input = h('input', { type: 'checkbox', checked });
+  return { input, el: h('label', { class: 'check-row' }, input, h('span', {}, h('strong', {}, text), hint ? h('span', { class: 'muted small block' }, hint) : null)) };
+}
+
 function showPreview(page, parsed, diff, { profiles, projects, templatesExist }) {
   clear(page);
   const writeCount = diff.toInsert.length + diff.toUpdate.length;
-  const items = [...diff.toInsert, ...diff.toUpdate.map((u) => u.task)].reduce((s, tk) => s + tk.checklist.length, 0);
-  const newProjects = parsed.projects.filter((p) => !projects.some((x) => norm(x.name) === norm(p.name))).length;
+  const items = [...diff.toInsert, ...diff.toUpdate.map((u) => u.task)].reduce((s, tk) => s + (tk.checklist || []).length, 0);
+  const newProjects = parsed.projects.filter((p) => !projects.some((x) => norm(x.name) === norm(p.name)));
   const newPeople = parsed.people.filter((p) => !profiles.some((x) => (p.email && norm(x.email) === norm(p.email)) || norm(x.full_name) === norm(p.full_name))).length;
+  const dirCount = parsed.lookups.filter((l) => l.kind === 'directorate').length;
 
   page.append(
     h('h1', { class: 'h1' }, t('import.preview', { file: parsed.fileName })),
+    h('p', { class: 'muted' }, t(parsed.format === 'era' ? 'import.format_era' : 'import.format_legacy')),
     h('div', { class: 'stats' },
       stat(t('import.to_insert'), diff.toInsert.length, 'tone-green'),
       stat(t('import.to_update'), diff.toUpdate.length, 'tone-amber'),
       stat(t('import.unchanged'), diff.unchanged.length),
       stat(t('import.errors'), parsed.errors.length, parsed.errors.length ? 'tone-red' : '')),
     h('div', { class: 'stats stats-small' },
-      stat(t('import.checklist_items'), items),
-      stat(t('import.projects'), `${parsed.projects.length}${newProjects ? ` (+${newProjects})` : ''}`),
-      stat(t('import.people'), `${parsed.people.length}${newPeople ? ` (+${newPeople})` : ''}`),
-      templatesExist ? null : stat(t('import.templates'), parsed.templates.length)));
+      dirCount ? stat(t('import.directorates'), dirCount) : null,
+      stat(t('import.projects'), `${parsed.projects.length}${newProjects.length ? ` (+${newProjects.length})` : ''}`),
+      items ? stat(t('import.checklist_items'), items) : null,
+      parsed.people.length ? stat(t('import.people'), `${parsed.people.length}${newPeople ? ` (+${newPeople})` : ''}`) : null));
 
-  if (diff.notInFile) page.append(h('p', { class: 'notice' }, icon('alert'), h('span', {}, t('import.not_in_file', { n: diff.notInFile }))));
+  if (newProjects.length) {
+    page.append(h('details', { class: 'details' }, h('summary', {}, `${t('import.new_projects')} (${newProjects.length})`),
+      h('ul', { class: 'plain-list' }, newProjects.map((p) => h('li', {}, `${p.name}${p.code_prefix ? ` · ${p.code_prefix}` : ''}`)))));
+  }
+
+  // Tam değiştirme (yalnızca owner): dosyada olmayanlar çöp kutusuna
+  let replace = null;
+  if (diff.notInFile) {
+    if (isOwner()) {
+      replace = checkbox(t('import.replace', { n: diff.notInFile }), t('import.replace_hint'));
+      page.append(h('div', { class: 'card card-warn' }, replace.el));
+    } else {
+      page.append(h('p', { class: 'notice' }, icon('alert'), h('span', {}, t('import.not_in_file', { n: diff.notInFile }))));
+    }
+  }
+
+  // Şablonlar: dosyadan yeniden oluştur
+  let tpl = null;
+  if (parsed.templates.length) {
+    const byType = ['web', 'panel', 'is_plani'].map((k) => `${label('project_type', k, getLang())} ${parsed.templates.filter((x) => x.project_type === k).length}`).join(' · ');
+    tpl = checkbox(t('import.templates_rebuild', { n: parsed.templates.length }), `${byType}. ${t(templatesExist ? 'import.templates_hint_replace' : 'import.templates_hint_new')}`, !templatesExist || parsed.format === 'era');
+    page.append(h('div', { class: 'card' }, tpl.el));
+  }
 
   if (parsed.errors.length) {
     page.append(h('h2', { class: 'h2 tone-red-text' }, t('import.error_list')),
@@ -160,40 +200,126 @@ function showPreview(page, parsed, diff, { profiles, projects, templatesExist })
   if (diff.toUpdate.length) {
     page.append(h('details', { class: 'details' }, h('summary', {}, `${t('import.update_list')} (${diff.toUpdate.length})`),
       table([t('import.col_no'), t('tasks.col_title'), t('import.col_fields')],
-        diff.toUpdate.map((u) => [u.task.no, u.task.title, u.changed.map((f) => t(`field.${f}`)).join(', ')]))));
+        diff.toUpdate.map((u) => [u.task.code, u.task.title, u.changed.map((f) => t(`field.${f}`)).join(', ')]))));
   }
   if (parsed.warnings.length) {
-    page.append(h('details', { class: 'details' }, h('summary', {}, `${t('import.warning_list')} (${parsed.warnings.length})`),
+    page.append(h('details', { class: 'details', open: parsed.warnings.some((w) => w.reason === 'warn.assignee_unknown') },
+      h('summary', {}, `${t('import.warning_list')} (${parsed.warnings.length})`),
       table([t('import.col_row'), t('import.col_no'), t('import.col_reason')],
         parsed.warnings.map((w) => [w.row, w.no, reasonText(w)]))));
   }
 
   const actions = h('div', { class: 'actions sticky-actions' },
     h('button', { class: 'btn', type: 'button', onclick: () => showStart(page) }, t('import.cancel')));
-  if (writeCount) {
-    const go = h('button', { class: 'btn btn-primary', type: 'button' },
-      parsed.errors.length ? t('import.confirm_errors', { n: writeCount, e: parsed.errors.length }) : t('import.confirm', { n: writeCount }));
-    go.addEventListener('click', () => save(page, buildPayload(parsed, diff)));
-    actions.append(go);
-  } else {
-    page.append(h('p', { class: 'notice notice-ok' }, icon('check'), h('span', {}, t('import.nothing'))));
-  }
+  const go = h('button', { class: 'btn btn-primary', type: 'button' });
+  const refresh = () => {
+    const willReplace = replace?.input.checked;
+    const willTpl = tpl?.input.checked;
+    go.disabled = !writeCount && !willReplace && !willTpl;
+    go.textContent = parsed.errors.length && writeCount
+      ? t('import.confirm_errors', { n: writeCount, e: parsed.errors.length })
+      : writeCount ? t('import.confirm', { n: writeCount }) : t('import.confirm_other');
+  };
+  replace?.input.addEventListener('change', refresh);
+  tpl?.input.addEventListener('change', refresh);
+  refresh();
+  if (!writeCount) page.append(h('p', { class: 'notice notice-ok' }, icon('check'), h('span', {}, t('import.nothing'))));
+  go.addEventListener('click', async () => {
+    const willReplace = Boolean(replace?.input.checked);
+    if (willReplace) {
+      const ok = await confirmDialog(t('import.replace_confirm', { n: diff.notInFile, m: parsed.tasks.length }),
+        { confirmLabel: t('import.replace_go'), danger: true });
+      if (!ok) return;
+    }
+    save(page, parsed, diff, { replace: willReplace, templates: Boolean(tpl?.input.checked) });
+  });
+  actions.append(go);
   page.append(actions);
 }
 
-async function save(page, payload) {
-  clear(page).append(spinner(t('import.saving')));
-  const { data, error } = await supabase.rpc('import_excel', { p: payload });
-  if (error) { fail(page, friendlyError(error)); return; }
-  await reloadAll();
-  clear(page).append(
-    h('div', { class: 'state' },
-      icon('check', 'icon-lg tone-green-text'),
-      h('h1', { class: 'h2' }, t('import.done_title')),
-      h('p', {}, t('import.done_body', { ins: data.inserted, upd: data.updated, tpl: data.templates })),
-      h('div', { class: 'actions' },
-        h('button', { class: 'btn', type: 'button', onclick: () => undo(page, data.batch_id) }, t('import.undo')),
-        h('a', { class: 'btn btn-primary', href: '#/gorevler' }, t('import.go_tasks')))));
+function progressView(page) {
+  const bar = h('div', { class: 'progress-fill', style: 'width:0%' });
+  const text = h('p', { class: 'muted' }, '');
+  clear(page).append(h('div', { class: 'state' },
+    h('h1', { class: 'h2' }, t('import.saving')),
+    h('div', { class: 'progress progress-wide', role: 'progressbar' }, h('div', { class: 'progress-track' }, bar)),
+    text));
+  return (done, total, label) => {
+    bar.style.width = `${total ? Math.round((done * 100) / total) : 100}%`;
+    text.textContent = label;
+  };
+}
+
+async function save(page, parsed, diff, { replace, templates }) {
+  const chunks = buildPayloadChunks(parsed, diff, CHUNK);
+  const steps = chunks.length + (replace ? 2 : 0) + (templates ? 1 : 0) + 1;
+  let step = 0;
+  const set = progressView(page);
+
+  try {
+    // 1) Tam değiştirmeden önce otomatik yedek
+    if (replace) {
+      set(step, steps, t('import.step_backup'));
+      const r = await callFn('maintenance', { mode: 'backup' });
+      if (!r.ok) throw new Error(t('import.backup_failed'));
+      step++;
+    }
+
+    // 2) Görevler 500'erli parçalarla (aynı içe aktarma oturumu)
+    let batchId = null;
+    let inserted = 0; let updated = 0; let noAssignee = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      set(step, steps, t('import.step_chunk', { i: i + 1, n: chunks.length }));
+      const { data, error } = await supabase.rpc('import_excel', { p: { ...chunks[i], batch_id: batchId } });
+      if (error) {
+        if (batchId) await supabase.rpc('undo_import', { p_batch: batchId });   // yarım kalmasın
+        throw error;
+      }
+      batchId = data.batch_id;
+      inserted += data.inserted; updated += data.updated; noAssignee += data.no_assignee || 0;
+      step++;
+    }
+
+    // 3) Dosyada olmayanlar çöp kutusuna
+    let trashed = 0;
+    if (replace) {
+      set(step, steps, t('import.step_trash'));
+      const { data, error } = await supabase.rpc('import_trash_missing', { p_batch: batchId, p_codes: parsed.tasks.map((x) => x.code) });
+      if (error) throw error;
+      trashed = data || 0;
+      step++;
+    }
+
+    // 4) Şablonlar
+    let tplCount = 0;
+    if (templates) {
+      set(step, steps, t('import.step_templates'));
+      const { data, error } = await supabase.rpc('replace_templates', { p: parsed.templates });
+      if (error) throw error;
+      tplCount = data || 0;
+      step++;
+    }
+
+    await supabase.rpc('import_finish', { p_batch: batchId });
+    set(steps, steps, t('import.step_reload'));
+    await reloadAll();
+
+    clear(page).append(
+      h('div', { class: 'state' },
+        icon('check', 'icon-lg tone-green-text'),
+        h('h1', { class: 'h2' }, t('import.done_title')),
+        h('p', {}, t('import.done_body', { ins: inserted, upd: updated })),
+        trashed ? h('p', {}, t('import.done_trashed', { n: trashed })) : null,
+        tplCount ? h('p', {}, t('import.done_templates', { n: tplCount })) : null,
+        noAssignee ? h('p', { class: 'tone-amber-text' }, t('import.done_no_assignee', { n: noAssignee })) : null,
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn', type: 'button', onclick: () => undo(page, batchId) }, t('import.undo')),
+          h('a', { class: 'btn', href: '#/ozet' }, t('summary.title')),
+          h('a', { class: 'btn btn-primary', href: '#/gorevler' }, t('import.go_tasks')))));
+  } catch (err) {
+    console.error(err);
+    fail(page, err?.message && !err.code ? err.message : friendlyError(err));
+  }
 }
 
 async function undo(page, batchId) {
@@ -203,7 +329,6 @@ async function undo(page, batchId) {
   const { data, error } = await supabase.rpc('undo_import', { p_batch: batchId });
   if (error) { fail(page, friendlyError(error)); return; }
   await reloadAll();
-  toast(t('import.undone', { del: data.deleted, res: data.restored }), { type: 'ok', timeout: 6000 });
+  toast(t('import.undone', { del: data.deleted, res: data.restored + (data.untrashed || 0) }), { type: 'ok', timeout: 6000 });
   showStart(page);
 }
-

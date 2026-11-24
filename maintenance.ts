@@ -40,7 +40,8 @@ function json(body: unknown, status = 200) {
 async function fetchAll(table: string, columns = '*', order = 'created_at'): Promise<any[]> {
   const out = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await db.from(table).select(columns).order(order).range(from, from + 999);
+    // İkinci sıra "id": aynı anda eklenen satırların sırası eşit olsa da sayfalar kaymaz (yinelenen/eksik satır olmaz)
+    const { data, error } = await db.from(table).select(columns).order(order).order('id').range(from, from + 999);
     if (error) throw new Error(`${table}: ${error.message}`);
     out.push(...(data ?? []));
     if (!data || data.length < 1000) break;
@@ -72,16 +73,37 @@ async function purgeOld() {
   return deleteTasks((data ?? []).map((x) => x.id));
 }
 
-// ---------------------------------------------------------------- Excel (18 sütun, içe aktarmayla aynı biçim)
+// ---------------------------------------------------------------- Excel (ERA "Görev Takip" biçimi, içe aktarmayla aynı)
 const L = {
-  status: { todo: 'Yapılacak', in_progress: 'Devam ediyor', waiting: 'Bekliyor', blocked: 'Engellendi', done: 'Tamamlandı', cancelled: 'İptal edildi' },
-  priority: { urgent: 'Acil', high: 'Yüksek', medium: 'Orta', low: 'Düşük' },
-  recurrence: { once: 'Tek sefer', daily: 'Her gün', weekdays: 'Hafta içi her gün', weekly: 'Her hafta', monthly: 'Her ay', yearly: 'Her yıl' },
+  status: { todo: 'Başlamadı', in_progress: 'Devam Ediyor', waiting: 'Beklemede', blocked: 'Beklemede', done: 'Tamamlandı', cancelled: 'İptal' },
+  priority: { urgent: 'Kritik', high: 'Yüksek', medium: 'Orta', low: 'Düşük' },
+  recurrence: { once: 'Tek sefer', daily: 'Günlük', weekdays: 'Hafta içi her gün', weekly: 'Haftalık', monthly: 'Aylık', yearly: 'Yıllık' },
   reminder: { none: 'Yok', at_time: 'Tam zamanında', '15m': '15 dk önce', '1h': '1 saat önce', '1d': '1 gün önce', '1w': '1 hafta önce' },
   weekday: { mon: 'Pazartesi', tue: 'Salı', wed: 'Çarşamba', thu: 'Perşembe', fri: 'Cuma', sat: 'Cumartesi', sun: 'Pazar' },
-  role: { owner: 'Yönetici (owner)', admin: 'Yetkili (admin)', member: 'Üye (member)', viewer: 'İzleyici (viewer)' },
 } as Record<string, Record<string, string>>;
-const trDate = (iso: string | null) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '');
+const ERA_HEAD = ['ID', 'Direktörlük / Birim', 'Alt Birim', 'Proje', 'Görev / Fonksiyon', 'Görev Detayı / Açıklama', 'Sorumlu',
+  'Öncelik', 'Başlangıç', 'Termin', 'Bitiş (Gerçekleşen)', 'Durum', 'İlerleme %', 'Kalan Gün', 'Termin Durumu',
+  'Tekrar Tipi', 'Süre (dk)', 'Adet', 'Günde', 'Haftada', 'Ayda', 'Yılda', 'Yıllık Tekrar', 'Toplam Saat (yıllık)', 'Notlar',
+  'Hatırlatma', 'Tekrar Günü', 'Etiketler', 'Referans', 'Kontrol Listesi'];
+const BIRIM_PROJECT = 'Evodak Birim İşleri';
+const serial = (iso: string | null) => {
+  if (!iso) return null;
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000 + 25569;
+};
+// deno-lint-ignore no-explicit-any
+function yearlyRepeat(t: any) {
+  const f = t.freq_count ?? 1;
+  return ({ daily: f * 302.4, weekdays: f * 252, weekly: f * 50.4, monthly: f * 12, yearly: f } as Record<string, number>)[t.recurrence] ?? 1;
+}
+// deno-lint-ignore no-explicit-any
+function recDay(t: any) {
+  if (!t.recurrence_day) return '';
+  const parts = String(t.recurrence_day).split(',');
+  if (t.recurrence === 'weekly') return parts.map((x) => L.weekday[x] ?? x).join(', ');
+  if (t.recurrence === 'yearly') return parts.map((x) => { const [m, d] = x.split('-'); return `${d}.${m}`; }).join(', ');
+  return parts.join(', ');
+}
 
 // deno-lint-ignore no-explicit-any
 function buildWorkbook(d: Record<string, any[]>) {
@@ -90,34 +112,49 @@ function buildWorkbook(d: Record<string, any[]>) {
   // deno-lint-ignore no-explicit-any
   const items = new Map<string, any[]>();
   for (const it of d.checklist_items) { if (!items.has(it.task_id)) items.set(it.task_id, []); items.get(it.task_id)!.push(it); }
-  const head = ['NO', 'PROJE', 'BÖLÜM', 'KATEGORİ', 'YAPILMASI GEREKEN', 'AÇIKLAMA', 'ETİKETLER', 'DURUM', 'ÖNCELİK',
-    'BİTİRME ORANI', 'SORUMLU KİŞİ', 'BAŞLANGIÇ TARİHİ', 'BİTİRME TARİHİ', 'TAHMİNİ SÜRE (dk)', 'TEKRAR', 'TEKRAR GÜNÜ', 'HATIRLATMA', 'REFERANS'];
-  const rows = d.tasks.filter((t) => !t.deleted_at).sort((a, b) => a.no - b.no).map((t) => {
+  const today = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+  const coll = new Intl.Collator('tr', { numeric: true });
+  const freqIdx: Record<string, number> = { daily: 0, weekdays: 0, weekly: 1, monthly: 2, yearly: 3 };
+  const rows = d.tasks.filter((t) => !t.deleted_at).sort((a, b) => coll.compare(a.code ?? `#${a.no}`, b.code ?? `#${b.no}`)).map((t) => {
     const list = (items.get(t.id) ?? []).sort((a, b) => a.sort_order - b.sort_order);
-    const desc = [t.description ?? '', ...list.map((it, i) => `${it.done ? '✓ ' : ''}${i + 1}. ${it.text}${it.note ? ` – ${it.note}` : ''}`)]
-      .filter((x, i) => i > 0 || x).join('\n');
-    const rd = t.recurrence === 'weekly' ? (L.weekday[t.recurrence_day] ?? '') : (t.recurrence_day ?? '');
-    return [t.no, projects.get(t.project_id)?.name ?? '', t.section, t.category ?? '', t.title, desc, (t.tags ?? []).join(', '),
-      L.status[t.status], L.priority[t.priority], `${t.progress ?? 0}%`, people.get(t.assignee_id)?.full_name ?? '',
-      trDate(t.start_date), t.due_date ? `${trDate(t.due_date)}${t.due_time ? ` ${String(t.due_time).slice(0, 5)}` : ''}` : '',
-      t.estimate_minutes ?? '', L.recurrence[t.recurrence], rd, L.reminder[t.reminder], (t.reference_links ?? []).join('\n')];
+    const checklist = list.map((it, i) => `${it.done ? '✓ ' : ''}${i + 1}. ${it.text}${it.note ? ` – ${it.note}` : ''}`).join('\n');
+    const freq = [null, null, null, null] as (number | null)[];
+    if (t.recurrence in freqIdx) freq[freqIdx[t.recurrence]] = t.freq_count ?? 1;
+    const left = t.due_date ? Math.round((Date.parse(t.due_date) - Date.parse(today)) / 86400000) : null;
+    const open = !['done', 'cancelled'].includes(t.status);
+    const state = !t.due_date || !open ? '-' : left! < 0 ? 'Gecikmiş' : left! <= 7 ? 'Yaklaşıyor (≤7 gün)' : 'Takvimde';
+    const yr = yearlyRepeat(t);
+    const prj = projects.get(t.project_id)?.name ?? '';
+    return [t.code ?? `#${t.no}`, t.directorate ?? '', t.section ?? '', prj === BIRIM_PROJECT ? '' : prj, t.category ?? '', t.title,
+      people.get(t.assignee_id)?.full_name ?? '', L.priority[t.priority], serial(t.start_date), serial(t.due_date),
+      t.status === 'done' && t.completed_at ? serial(new Date(new Date(t.completed_at).getTime() + 3 * 3600000).toISOString()) : null,
+      L.status[t.status], (t.progress ?? 0) / 100, left, state, L.recurrence[t.recurrence], t.estimate_minutes ?? null, t.quantity ?? 1,
+      ...freq, Math.round(yr * 10) / 10, Math.round(((t.estimate_minutes ?? 0) * (t.quantity ?? 1) * yr) / 60 * 10) / 10,
+      t.description ?? '', L.reminder[t.reminder], recDay(t), (t.tags ?? []).join(', '), (t.reference_links ?? []).join('\n'), checklist];
   });
+  const head = [
+    ['Evodak Gayrimenkul Yönetimi — Görev Takip (haftalık yedek)'],
+    [`Yedek tarihi: ${today.slice(8, 10)}.${today.slice(5, 7)}.${today.slice(0, 4)} · ${rows.length} görev. Bu dosya panele geri yüklenebilir (Ayarlar → Veri ve yedek → Excel içe aktar).`],
+    [''],
+    ERA_HEAD,
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
+  for (let r = 4; r < rows.length + 4; r++) {
+    for (const c of [8, 9, 10]) { const cell = ws[XLSX.utils.encode_cell({ r, c })]; if (cell && cell.t === 'n') cell.z = 'dd.mm.yyyy'; }
+    const p = ws[XLSX.utils.encode_cell({ r, c: 12 })]; if (p && p.t === 'n') p.z = '0%';
+  }
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Görevler');
+  XLSX.utils.book_append_sheet(wb, ws, 'Görev Takip');
+  const pick = (k: string) => d.lookups.filter((x) => x.kind === k).sort((a, b) => a.sort_order - b.sort_order).map((x) => x.value);
+  const cols = [pick('directorate'), pick('section'), Object.values(L.status).filter((v, i, a) => a.indexOf(v) === i), Object.values(L.priority),
+    d.profiles.filter((p) => p.active !== false).map((p) => p.full_name),
+    [...d.projects].sort((a, b) => a.sort_order - b.sort_order).map((p) => p.name), pick('category')];
+  const n = Math.max(...cols.map((c) => c.length));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['AD SOYAD', 'E-POSTA', 'ROL', 'TELEFON', 'DİL', 'GÜNLÜK ÖZET SAATİ', 'SESSİZ SAATLER', 'SADECE KENDİ GÖREVLERİ'],
-    ...d.profiles.map((p) => [p.full_name, p.email ?? '', L.role[p.role], p.phone ?? '', p.language === 'en' ? 'English' : 'Türkçe',
-      p.daily_summary_time ? String(p.daily_summary_time).slice(0, 5) : '',
-      p.quiet_hours_start && p.quiet_hours_end ? `${String(p.quiet_hours_start).slice(0, 5)}-${String(p.quiet_hours_end).slice(0, 5)}` : '',
-      p.only_own_tasks ? 'Evet' : 'Hayır']),
-  ]), 'Kişiler');
-  const sec = d.lookups.filter((x) => x.kind === 'section').map((x) => x.value);
-  const cat = d.lookups.filter((x) => x.kind === 'category').map((x) => x.value);
-  const prj = [...d.projects].sort((a, b) => a.sort_order - b.sort_order).map((p) => p.name);
-  const n = Math.max(sec.length, cat.length, prj.length);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['PROJE', 'BÖLÜM', 'KATEGORİ'],
-    ...Array.from({ length: n }, (_, i) => [prj[i] ?? '', sec[i] ?? '', cat[i] ?? ''])]), 'Listeler');
-  return new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+    ['Direktörlük / Birim', 'Alt Birim', 'Durum', 'Öncelik', 'Sorumlu Personel', 'Proje', 'Görev / Fonksiyon'],
+    ...Array.from({ length: n }, (_, i) => cols.map((c) => c[i] ?? '')),
+  ]), 'Listeler');
+  return new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: true }));
 }
 
 // ---------------------------------------------------------------- yedek

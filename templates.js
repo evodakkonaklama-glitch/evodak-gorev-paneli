@@ -9,8 +9,9 @@ import { store, reloadAll } from './store.js';
 import { setTaskFilter } from './tasks.js';
 import { addDays, weekdayIndex, fmtDate } from './dates.js';
 
-const TYPES = ['web', 'panel', 'is_plani'];
-const COLS = 'id,project_type,sort_order,section,category,title,description,estimate_minutes,recurrence,recurrence_day,reminder,priority,tags';
+const TYPES = ['web', 'panel', 'is_plani'];          // şablonu olan türler
+const ALL_TYPES = [...TYPES, 'program', 'birim'];
+const COLS = 'id,project_type,sort_order,directorate,section,category,title,description,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,priority,tags';
 const opts = (kind, cur) => Object.keys(VALUE_LABELS[kind]).map((k) => h('option', { value: k, selected: k === cur }, label(kind, k, getLang())));
 
 async function fetchTemplates(type) {
@@ -155,7 +156,7 @@ export function scheduleTasks(tasks, startIso, dayMinutes) {
   let left = cap;
   return tasks.map((tk) => {
     if (tk.recurrence && tk.recurrence !== 'once') return { start_date: startIso, due_date: null };
-    let est = Math.max(1, Number(tk.estimate_minutes) || DEFAULT_ESTIMATE);
+    let est = Math.max(1, (Number(tk.estimate_minutes) || DEFAULT_ESTIMATE) * Math.max(1, Number(tk.quantity) || 1));
     if (left <= 0) { day = nextWorkday(addDays(day, 1)); left = cap; }
     const start = day;
     while (est > left) { est -= left; day = nextWorkday(addDays(day, 1)); left = cap; }
@@ -167,7 +168,11 @@ export function scheduleTasks(tasks, startIso, dayMinutes) {
 export function newProjectDialog() {
   const msg = h('p', { class: 'form-msg', role: 'alert' });
   const name = h('input', { class: 'input', id: 'np-name', required: true, autocomplete: 'off' });
-  const type = h('select', { class: 'input', id: 'np-type' }, TYPES.map((x) => h('option', { value: x }, label('project_type', x, getLang()))));
+  const type = h('select', { class: 'input', id: 'np-type' }, ALL_TYPES.map((x) => h('option', { value: x }, label('project_type', x, getLang()))));
+  const prefix = h('input', { class: 'input input-code', id: 'np-prefix', maxlength: 4, autocomplete: 'off', placeholder: 'ABC' });
+  let prefixTouched = false;
+  prefix.addEventListener('input', () => { prefixTouched = true; prefix.value = prefix.value.toLocaleUpperCase('tr').replace(/[^A-ZÇĞİÖŞÜ]/g, ''); });
+  name.addEventListener('input', () => { if (!prefixTouched) prefix.value = suggestPrefix(name.value); });
   const useTpl = h('input', { type: 'checkbox', id: 'np-tpl', checked: true });
   const tplInfo = h('p', { class: 'muted small np-info' });
   const people = store.profiles.filter((p) => p.active && p.role !== 'viewer');
@@ -229,6 +234,7 @@ export function newProjectDialog() {
     h('div', { class: 'grid-2' },
       h('div', { class: 'field' }, h('label', { for: 'np-name' }, t('np.name')), name),
       h('div', { class: 'field' }, h('label', { for: 'np-type' }, t('np.type')), type)),
+    h('div', { class: 'field' }, h('label', { for: 'np-prefix' }, t('np.prefix')), prefix, h('p', { class: 'muted small' }, t('np.prefix_help'))),
     h('div', { class: 'grid-3' },
       h('div', { class: 'field' }, h('label', { for: 'np-assignee' }, t('np.assignee')), assignee),
       h('div', { class: 'field' }, h('label', { for: 'np-start' }, t('np.start')), start),
@@ -245,23 +251,26 @@ export function newProjectDialog() {
     e.preventDefault();
     const setMsg = (x) => { msg.textContent = x; msg.className = 'form-msg form-msg-error'; };
     if (!name.value.trim()) return setMsg(t('np.err_name'));
+    if (prefix.value && !/^[A-ZÇĞİÖŞÜ]{2,4}$/.test(prefix.value)) return setMsg(t('np.err_prefix'));
+    if (prefix.value && store.projects.some((x) => (x.code_prefix || '').toLocaleUpperCase('tr') === prefix.value)) return setMsg(t('np.err_prefix_used'));
     btn.disabled = true; msg.textContent = '';
     const list = useTpl.checked ? chosen() : [];
     const plan = start.value ? scheduleTasks(list, start.value, Number(hours.value) * 60) : [];
     const tasks = list.map((r, i) => {
       const d = parseDescription(r.description);
       return {
-        section: r.section, category: r.category, title: r.title, description: d.description,
+        directorate: r.directorate || null, section: r.section, category: r.category, title: r.title, description: d.description,
         checklist: d.checklist.map((x) => ({ text: x.text, note: x.note })),
-        estimate_minutes: r.estimate_minutes, recurrence: r.recurrence, recurrence_day: r.recurrence_day,
+        estimate_minutes: r.estimate_minutes, quantity: r.quantity || 1, recurrence: r.recurrence, freq_count: r.freq_count,
+        recurrence_day: r.recurrence_day,
         reminder: r.reminder, priority: r.priority, tags: r.tags || [],
         assignee_id: assignee.value || null,
         start_date: plan[i]?.start_date || null, due_date: plan[i]?.due_date || null,
       };
     });
-    const { data, error } = await supabase.rpc('create_project', { p: { name: name.value.trim(), type: type.value, tasks } });
+    const { data, error } = await supabase.rpc('create_project', { p: { name: name.value.trim(), type: type.value, code_prefix: prefix.value || null, tasks } });
     btn.disabled = false;
-    if (error) return setMsg(error.code === '23505' ? t('np.err_exists') : t('np.err', { msg: error.message }));
+    if (error) return setMsg(error.code === '23505' ? (/öneki/.test(error.message) ? t('np.err_prefix_used') : t('np.err_exists')) : t('np.err', { msg: error.message }));
     dlg.close();
     toast(t('np.done', { name: name.value.trim(), n: data.tasks }), { type: 'ok' });
     await reloadAll();
@@ -279,12 +288,15 @@ export function newProjectDialog() {
 export function editProjectDialog(p) {
   const msg = h('p', { class: 'form-msg', role: 'alert' });
   const name = h('input', { class: 'input', id: 'ep-name', value: p.name });
-  const type = h('select', { class: 'input', id: 'ep-type' }, TYPES.map((x) => h('option', { value: x, selected: x === p.type }, label('project_type', x, getLang()))));
+  const type = h('select', { class: 'input', id: 'ep-type' }, ALL_TYPES.map((x) => h('option', { value: x, selected: x === p.type }, label('project_type', x, getLang()))));
+  const prefix = h('input', { class: 'input input-code', id: 'ep-prefix', maxlength: 4, value: p.code_prefix || '', autocomplete: 'off' });
+  prefix.addEventListener('input', () => { prefix.value = prefix.value.toLocaleUpperCase('tr').replace(/[^A-ZÇĞİÖŞÜ]/g, ''); });
   const archived = h('input', { type: 'checkbox', id: 'ep-arch', checked: p.archived });
   const form = h('form', { class: 'form', novalidate: true },
     h('h2', { class: 'h2' }, t('np.edit_title')),
     h('div', { class: 'field' }, h('label', { for: 'ep-name' }, t('np.name')), name),
     h('div', { class: 'field' }, h('label', { for: 'ep-type' }, t('np.type')), type),
+    h('div', { class: 'field' }, h('label', { for: 'ep-prefix' }, t('np.prefix')), prefix, h('p', { class: 'muted small' }, t('np.prefix_edit_help'))),
     h('label', { class: 'check' }, archived, t('np.archived')),
     h('p', { class: 'muted small' }, t('np.archived_help')),
     msg,
@@ -295,6 +307,11 @@ export function editProjectDialog(p) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!name.value.trim()) { msg.textContent = t('np.err_name'); msg.className = 'form-msg form-msg-error'; return; }
+    if (prefix.value && !/^[A-ZÇĞİÖŞÜ]{2,4}$/.test(prefix.value)) { msg.textContent = t('np.err_prefix'); msg.className = 'form-msg form-msg-error'; return; }
+    if ((prefix.value || null) !== (p.code_prefix || null)) {
+      const r = await supabase.rpc('set_project_prefix', { p_project: p.id, p_prefix: prefix.value || null });
+      if (r.error) { msg.textContent = r.error.code === '23505' ? t('np.err_prefix_used') : t('tpl.err'); msg.className = 'form-msg form-msg-error'; return; }
+    }
     const { error } = await supabase.from('projects').update({ name: name.value.trim(), type: type.value, archived: archived.checked }).eq('id', p.id);
     if (error) { msg.textContent = error.code === '23505' ? t('np.err_exists') : t('tpl.err'); msg.className = 'form-msg form-msg-error'; return; }
     dlg.close();
@@ -304,4 +321,17 @@ export function editProjectDialog(p) {
   dlg.addEventListener('close', () => dlg.remove());
   document.body.append(dlg);
   dlg.showModal();
+}
+
+// Proje adından kod öneki önerisi: "Evodak Mavi Göl Web Projesi" -> "MGW"
+export function suggestPrefix(name) {
+  const stop = new Set(['evodak', 'projesi', 'proje', 've', '&', 'iş', 'plan', 'planı']);
+  const words = String(name || '').toLocaleUpperCase('tr').split(/\s+/).filter((w) => w && !stop.has(w.toLocaleLowerCase('tr')));
+  const letters = words.map((w) => w.replace(/[^A-ZÇĞİÖŞÜ]/g, '')[0]).filter(Boolean).join('');
+  let p = letters.slice(0, 3);
+  if (p.length < 2) p = (words[0] || '').replace(/[^A-ZÇĞİÖŞÜ]/g, '').slice(0, 3);
+  const used = new Set(store.projects.map((x) => (x.code_prefix || '').toLocaleUpperCase('tr')));
+  if (!used.has(p)) return p;
+  for (const c of 'ABCDEFGHIJKLMNOPRSTUVYZ') if (!used.has(p.slice(0, 2) + c)) return p.slice(0, 2) + c;
+  return p;
 }

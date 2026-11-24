@@ -41,7 +41,7 @@ let dataTimer = null;
 function emitData() { clearTimeout(dataTimer); dataTimer = setTimeout(() => emit('data'), 150); }
 
 // ---------------------------------------------------------------- yardımcılar
-const TASK_COLS = 'id,no,project_id,section,category,title,description,tags,status,priority,progress,assignee_id,start_date,due_date,due_time,estimate_minutes,recurrence,recurrence_day,reminder,reference_links,completed_at,version,deleted_at,created_at,updated_at,created_by,updated_by';
+const TASK_COLS = 'id,no,code,project_id,directorate,section,category,title,description,tags,status,priority,progress,assignee_id,start_date,due_date,due_time,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,reference_links,completed_at,version,deleted_at,created_at,updated_at,created_by,updated_by';
 
 function isNetErr(e) {
   if (!navigator.onLine) return true;
@@ -93,9 +93,9 @@ export async function loadAll(profile) {
     const [tasks, items, projects, profiles, lookups] = await Promise.all([
       fetchAll(() => supabase.from('tasks').select(TASK_COLS).is('deleted_at', null).order('no')),
       fetchAll(() => supabase.from('checklist_items').select('id,task_id,text,note,done,done_at,done_by,sort_order').order('task_id').order('sort_order')),
-      fetchAll(() => supabase.from('projects').select('id,name,type,sort_order,archived').order('sort_order')),
+      fetchAll(() => supabase.from('projects').select('id,name,type,sort_order,archived,code_prefix').order('sort_order')),
       fetchAll(() => supabase.from('profiles').select('id,full_name,email,role,active').order('full_name')),
-      fetchAll(() => supabase.from('lookups').select('id,kind,value,sort_order').order('sort_order')),
+      fetchAll(() => supabase.from('lookups').select('id,kind,value,sort_order,parent').order('sort_order')),
     ]);
     store.tasks = new Map(tasks.map((t) => [t.id, t]));
     setChecklist(items);
@@ -166,7 +166,7 @@ function subscribeRealtime() {
 }
 
 async function refreshSmall(kind) {
-  const sel = { projects: 'id,name,type,sort_order,archived', lookups: 'id,kind,value,sort_order', profiles: 'id,full_name,email,role,active' }[kind];
+  const sel = { projects: 'id,name,type,sort_order,archived,code_prefix', lookups: 'id,kind,value,sort_order,parent', profiles: 'id,full_name,email,role,active' }[kind];
   const q = supabase.from(kind).select(sel);
   const { data } = await (kind === 'profiles' ? q.order('full_name') : q.order('sort_order'));
   if (data) { store[kind] = data; emitData(); scheduleSnapshot(); }
@@ -238,7 +238,7 @@ export function hasPending(id, field) {
 export async function createTask(values) {
   const maxNo = Math.max(0, ...[...store.tasks.values()].map((t) => t.no || 0));
   const row = {
-    id: crypto.randomUUID(), no: maxNo + 1, status: 'todo', priority: 'medium', progress: 0,
+    id: crypto.randomUUID(), no: maxNo + 1, status: 'todo', priority: 'medium', progress: 0, quantity: 1,
     tags: [], reference_links: [], recurrence: 'once', reminder: 'none', due_time: '09:00:00', version: 1,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...values,
   };
@@ -456,7 +456,7 @@ async function runOp(op) {
   if (op.kind === 'insert-task') {
     const { data, error } = await supabase.from('tasks').insert(op.values).select(TASK_COLS).single();
     if (error) {
-      if (error.code === '23505' && /no/.test(error.message || '')) {
+      if (error.code === '23505' && /tasks_no_key/.test(error.message || '')) {
         // NO çakıştı: bir sonrakini dene
         const maxNo = Math.max(0, ...[...store.tasks.values()].map((t) => t.no || 0));
         op.values.no = maxNo + 1;

@@ -1,4 +1,4 @@
-// Gantt (zaman çizelgesi): görevler başlangıç → bitiş çubukları olarak, projelere göre gruplu.
+// Gantt (zaman çizelgesi): görevler başlangıç → bitiş çubukları olarak, direktörlük veya projeye göre gruplu.
 // Bilgisayarda çubuğu sürükleyerek iki tarihi birlikte kaydırır, sağ ucundan çekerek bitişi değiştirirsiniz.
 import { h, icon, toast } from './ui.js';
 import { t, getLang } from './i18n.js';
@@ -7,6 +7,8 @@ import { todayIso, addDays, startOfWeek, fmtLong, fmtDate, weekdayIndex, istanbu
 import { canEdit } from './tasks.js';
 
 const DAY_MS = 86400000;
+const OPEN = new Set();     // çok görevde açılan gruplar
+const CLOSED = new Set();   // az görevde kapatılan gruplar
 const dayNum = (iso) => Math.round(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY_MS);
 
 export function ganttRange(state) {
@@ -35,8 +37,26 @@ export function ganttView(state, ctx, { save, draw }) {
     return [a, b];
   };
   const visible = dated.filter((x) => { const [a, b] = span(x); return b >= R.start && a <= R.end; });
-  const order = new Map(store.projects.map((p, i) => [p.id, i]));
-  visible.sort((x, y) => (order.get(x.project_id) ?? 999) - (order.get(y.project_id) ?? 999) || span(x)[0].localeCompare(span(y)[0]) || x.no - y.no);
+  // Gruplama: Direktörlük (varsayılan) veya Proje — Excel'deki "Gantt" ve "Proje Gantt" sayfaları
+  const groupBy = state.ggroup === 'project' ? 'project' : 'directorate';
+  const projName = new Map(store.projects.map((p) => [p.id, p.name]));
+  const gKey = (x) => (groupBy === 'project' ? projName.get(x.project_id) || '—' : x.directorate || '—');
+  const gOrder = groupBy === 'project' ? store.projects.map((p) => p.name) : store.lookups.filter((l) => l.kind === 'directorate').map((l) => l.value);
+  const groups = new Map();
+  for (const x of visible) { const k = gKey(x); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); }
+  const keys = [...groups.keys()].sort((a, b) => {
+    const ia = gOrder.indexOf(a); const ib = gOrder.indexOf(b);
+    return ((ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib)) || a.localeCompare(b, 'tr');
+  });
+  groups.forEach((list) => list.sort((x, y) => span(x)[0].localeCompare(span(y)[0]) || String(x.code).localeCompare(String(y.code), 'tr', { numeric: true })));
+  // Çok görevde gruplar kapalı başlar; açılanlar oturum boyunca hatırlanır
+  const many = visible.length > 150;
+  const isOpen = (k) => (many ? OPEN.has(`${groupBy}:${k}`) : !CLOSED.has(`${groupBy}:${k}`));
+  const toggle = (k) => {
+    const id = `${groupBy}:${k}`;
+    if (many) { if (OPEN.has(id)) OPEN.delete(id); else OPEN.add(id); } else if (CLOSED.has(id)) CLOSED.delete(id); else CLOSED.add(id);
+    draw();
+  };
 
   // Başlık: ay adları ve günler
   const width = R.days * R.px;
@@ -54,30 +74,43 @@ export function ganttView(state, ctx, { save, draw }) {
   const showToday = today >= R.start && today <= R.end;
 
   const rows = [];
-  let lastProject = null;
-  for (const x of visible) {
-    if (x.project_id !== lastProject) {
-      lastProject = x.project_id;
-      const p = store.projects.find((q) => q.id === x.project_id);
-      rows.push(h('div', { class: 'gt-row gt-group' },
-        h('div', { class: 'gt-label' }, p?.name || '—'),
-        h('div', { class: 'gt-track', style: `width:${width}px` })));
-    }
-    const [a, b] = span(x);
+  const barGeom = (a, b) => {
     const left = Math.max(0, dayNum(a) - startN) * R.px;
     const right = Math.min(R.days, dayNum(b) - startN + 1) * R.px;
-    const overdue = x.status !== 'done' && x.due_date && istanbulToDate(x.due_date, x.due_time) < now;
-    const editable = canEdit(ctx, x) && !touch;
-    const bar = h('a', {
-      class: `gt-bar st-${x.status} ${overdue ? 'is-overdue' : ''} ${editable ? 'is-draggable' : ''}`,
-      href: `#/gorev/${x.id}`, style: `left:${left}px;width:${Math.max(R.px, right - left)}px`,
-      title: `${x.title}\n${fmtDate(a)} → ${fmtDate(b)} · %${x.progress || 0}`,
-    }, h('span', { class: 'gt-fill', style: `width:${x.progress || 0}%` }), h('span', { class: 'gt-text' }, x.title),
-    editable ? h('span', { class: 'gt-handle', 'aria-hidden': 'true' }) : null);
-    if (editable) attachDrag(bar, x, a, b);
-    rows.push(h('div', { class: 'gt-row' },
-      h('a', { class: 'gt-label gt-task', href: `#/gorev/${x.id}` }, h('span', { class: 'muted small' }, `#${x.no} `), x.title),
-      h('div', { class: 'gt-track', style: `width:${width}px;background:${shade.join(',') || 'none'}` }, bar)));
+    return { left, width: Math.max(R.px, right - left) };
+  };
+  for (const k of keys) {
+    const list = groups.get(k);
+    const open = isOpen(k);
+    const a0 = list.reduce((m, x) => (span(x)[0] < m ? span(x)[0] : m), '9999-12-31');
+    const b0 = list.reduce((m, x) => (span(x)[1] > m ? span(x)[1] : m), '0000-01-01');
+    const g = barGeom(a0, b0);
+    const late = list.filter((x) => x.status !== 'done' && x.due_date && istanbulToDate(x.due_date, x.due_time) < now).length;
+    const done = list.filter((x) => x.status === 'done').length;
+    rows.push(h('div', { class: 'gt-row gt-group' },
+      h('button', { type: 'button', class: 'gt-label gt-group-btn', 'aria-expanded': String(open), onclick: () => toggle(k) },
+        icon(open ? 'chevronDown' : 'chevron', 'icon-sm'), h('span', { class: 'gt-group-name' }, k), h('span', { class: 'quick-n' }, String(list.length))),
+      h('div', { class: 'gt-track', style: `width:${width}px` },
+        h('div', { class: `gt-sum ${late ? 'is-overdue' : ''}`, style: `left:${g.left}px;width:${g.width}px`,
+          title: `${k}\n${fmtDate(a0)} → ${fmtDate(b0)} · ${done}/${list.length}` },
+        h('span', { class: 'gt-fill', style: `width:${list.length ? Math.round((done * 100) / list.length) : 0}%` })))));
+    if (!open) continue;
+    for (const x of list) {
+      const [a, b] = span(x);
+      const { left, width: w } = barGeom(a, b);
+      const overdue = x.status !== 'done' && x.due_date && istanbulToDate(x.due_date, x.due_time) < now;
+      const editable = canEdit(ctx, x) && !touch;
+      const bar = h('a', {
+        class: `gt-bar st-${x.status} ${overdue ? 'is-overdue' : ''} ${editable ? 'is-draggable' : ''}`,
+        href: `#/gorev/${x.id}`, style: `left:${left}px;width:${w}px`,
+        title: `${x.code || ''} ${x.title}\n${fmtDate(a)} → ${fmtDate(b)} · %${x.progress || 0}`,
+      }, h('span', { class: 'gt-fill', style: `width:${x.progress || 0}%` }), h('span', { class: 'gt-text' }, x.title),
+      editable ? h('span', { class: 'gt-handle', 'aria-hidden': 'true' }) : null);
+      if (editable) attachDrag(bar, x, a, b);
+      rows.push(h('div', { class: 'gt-row' },
+        h('a', { class: 'gt-label gt-task', href: `#/gorev/${x.id}` }, h('span', { class: 'muted small' }, `${x.code || `#${x.no}`} `), x.title),
+        h('div', { class: 'gt-track', style: `width:${width}px;background:${shade.join(',') || 'none'}` }, bar)));
+    }
   }
 
   function attachDrag(bar, x, a, b) {
@@ -136,8 +169,21 @@ export function ganttView(state, ctx, { save, draw }) {
     ...rows,
     showToday ? h('div', { class: 'gt-today', style: `left:calc(var(--gt-label) + ${todayLeft}px);height:calc(${rows.length} * var(--gt-row) + var(--gt-head))` }) : null);
 
+  const grp = h('div', { class: 'seg seg-sm', role: 'group', 'aria-label': t('gt.group') },
+    ...[['directorate', t('field.directorate')], ['project', t('tasks.col_project')]].map(([g, txt]) => h('button', { type: 'button',
+      class: `seg-btn ${groupBy === g ? 'active' : ''}`, 'aria-pressed': String(groupBy === g),
+      onclick: () => { state.ggroup = g; save(); draw(); } }, txt)));
+  const allBtn = h('button', { class: 'btn btn-link btn-sm', type: 'button', onclick: () => {
+    const anyClosed = keys.some((k) => !isOpen(k));
+    keys.forEach((k) => {
+      const id = `${groupBy}:${k}`;
+      if (many) { if (anyClosed) OPEN.add(id); else OPEN.delete(id); } else if (anyClosed) CLOSED.delete(id); else CLOSED.add(id);
+    });
+    draw();
+  } }, keys.some((k) => !isOpen(k)) ? t('gt.open_all') : t('gt.close_all'));
+
   const box = h('div', { class: 'gt-wrap' },
-    h('div', { class: 'row-gap gt-tools' }, zoom, mine,
+    h('div', { class: 'row-gap gt-tools' }, zoom, grp, mine, keys.length > 1 ? allBtn : null,
       h('span', { class: 'muted small' }, undated ? t('gt.undated', { n: undated }) : '')),
     visible.length ? scroller : h('div', { class: 'state' }, icon('calendar', 'icon-lg'), h('p', {}, t('gt.empty'))),
     h('p', { class: 'muted small mt' }, touch ? t('gt.hint_touch') : t('gt.hint')));

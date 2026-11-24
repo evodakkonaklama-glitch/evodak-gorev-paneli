@@ -105,7 +105,7 @@ function gTaskBody(t: Task, projects: Map<string, string>) {
   const proj = projects.get(t.project_id) ?? '';
   return {
     title: t.title,
-    notes: `${[proj, t.section].filter(Boolean).join(' · ')}\n${APP_URL}#/gorev/${t.id}`,
+    notes: `${[t.code, proj, t.section].filter(Boolean).join(' · ')}\n${APP_URL}#/gorev/${t.id}`,
     due: t.due_date ? `${t.due_date}T00:00:00.000Z` : null,
     status: t.status === 'done' ? 'completed' : 'needsAction',
   };
@@ -147,7 +147,7 @@ async function syncProfile(profileId: string) {
   // 2) Eşlemeler ve panel görevleri
   const { data: links } = await db.from('google_task_links').select('task_id,google_task_id,synced_version').eq('profile_id', profileId);
   const linkMap = new Map((links ?? []).map((l) => [l.task_id, l]));
-  const cols = 'id,title,section,project_id,due_date,status,assignee_id,deleted_at,version,recurrence';
+  const cols = 'id,code,title,section,project_id,due_date,status,assignee_id,deleted_at,version,recurrence';
   const { data: mine } = await db.from('tasks').select(cols).eq('assignee_id', profileId).is('deleted_at', null).not('status', 'in', '(done,cancelled)').limit(1000);
   const linkedIds = [...linkMap.keys()];
   const linked: Task[] = [];

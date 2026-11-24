@@ -4,6 +4,7 @@ import { t, getLang } from './i18n.js';
 import { store, on, setStatus } from './store.js';
 import { todayIso, addDays, fmtLong, fmtDate, fmtTime, dueInfo, istanbulToDate } from './dates.js';
 import { priorityBadge, canEdit, setTaskFilter } from './tasks.js';
+import { dueState } from './excel-format.js';
 
 function stat(labelText, value, tone = '', iconName) {
   return h('div', { class: `stat ${tone}` },
@@ -43,10 +44,14 @@ export async function render(root, ctx) {
           : h('span', { class: 'muted small' }, `${fmtDate(tk.due_date)} ${fmtTime(tk.due_time)}`)));
   }
 
-  function section(title, items, tone, emptyText) {
+  // Çok görevde her bölüm ilk 15 işi gösterir; devamı Görevler ekranında
+  const SEC_MAX = 15;
+  function section(title, items, tone, emptyText, more) {
     return h('section', { class: `today-sec ${tone || ''}` },
       h('h2', { class: 'h3' }, title, h('span', { class: 'quick-n' }, String(items.length))),
-      items.length ? h('ul', { class: 'today-list' }, items.map(row)) : h('p', { class: 'muted small pad0' }, emptyText));
+      items.length ? h('ul', { class: 'today-list' }, items.slice(0, SEC_MAX).map(row)) : h('p', { class: 'muted small pad0' }, emptyText),
+      items.length > SEC_MAX ? h('button', { class: 'btn btn-link', type: 'button', onclick: () => { setTaskFilter(more || {}); location.hash = '#/gorevler'; } },
+        t('today.more', { n: items.length - SEC_MAX })) : null);
   }
 
   function draw() {
@@ -55,10 +60,12 @@ export async function render(root, ctx) {
     const in3 = addDays(today, 3);
     const all = [...store.tasks.values()].filter((x) => x.status !== 'cancelled');
     const open = all.filter((x) => x.status !== 'done');
-    const overdue = open.filter((x) => x.due_date && istanbulToDate(x.due_date, x.due_time) < now)
+    const overdue = open.filter((x) => x.recurrence === 'once' && x.due_date && istanbulToDate(x.due_date, x.due_time) < now)
       .sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
     const isToday = (x) => x.due_date === today || x.start_date === today;
-    const todayRec = open.filter((x) => x.recurrence !== 'once' && x.due_date === today && !overdue.includes(x));
+    // Bugün tekrarlananlar: bugünkü ve kaçırılmış (tarihi geçmiş) tekrarlar
+    const todayRec = open.filter((x) => x.recurrence !== 'once' && x.due_date && x.due_date <= today)
+      .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0));
     const todayList = open.filter((x) => isToday(x) && !overdue.includes(x) && !todayRec.includes(x))
       .sort((a, b) => String(a.due_time).localeCompare(String(b.due_time)));
     const soon = open.filter((x) => x.due_date && x.due_date > today && x.due_date <= in3)
@@ -66,17 +73,18 @@ export async function render(root, ctx) {
     const avg = all.length ? Math.round(all.reduce((s, x) => s + (x.progress || 0), 0) / all.length) : 0;
     const prioRank = { urgent: 0, high: 1 };
     const priority = open.filter((x) => x.priority === 'urgent' || x.priority === 'high')
-      .sort((a, b) => (prioRank[a.priority] - prioRank[b.priority]) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || a.no - b.no);
+      .sort((a, b) => (prioRank[a.priority] - prioRank[b.priority]) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || String(a.code).localeCompare(String(b.code), 'tr', { numeric: true }));
     const PRIO_MAX = 8;
 
     clear(page).append(
       h('div', { class: 'page-head' }, h('div', {}, h('h1', { class: 'h1' }, t('today.title')), h('p', { class: 'muted count' }, fmtLong(today, lang))),
         h('a', { class: 'btn', href: '#/haftalik' }, icon('chart'), t('wk.title'))),
-      h('div', { class: 'stats stats-5' },
+      h('div', { class: 'stats stats-6' },
         stat(t('today.total'), all.length, '', 'list'),
         stat(t('today.done'), all.filter((x) => x.status === 'done').length, 'tone-green', 'check'),
         stat(t('today.in_progress'), all.filter((x) => x.status === 'in_progress').length, 'tone-amber', 'play'),
         stat(t('today.overdue'), overdue.length, overdue.length ? 'tone-red' : '', 'alert'),
+        stat(t('summary.soon'), all.filter((x) => dueState(x, today) === 'soon').length, 'tone-amber', 'clock'),
         stat(t('today.avg'), `%${avg}`, '', 'chart')),
       h('div', { class: 'today-grid' },
         h('section', { class: 'today-sec sec-amber' },
@@ -84,10 +92,10 @@ export async function render(root, ctx) {
           priority.length ? h('ul', { class: 'today-list' }, priority.slice(0, PRIO_MAX).map(row)) : h('p', { class: 'muted small pad0' }, t('today.none_priority')),
           priority.length > PRIO_MAX ? h('button', { class: 'btn btn-link', type: 'button', onclick: () => { setTaskFilter({ sort: 'priority', dir: 1, status: '' }); location.hash = '#/gorevler'; } },
             t('today.priority_more', { n: priority.length - PRIO_MAX })) : null),
-        section(t('today.sec_overdue'), overdue, 'sec-red', t('today.none_overdue')),
-        section(t('today.sec_today'), todayList, '', t('today.none_today')),
-        section(t('today.sec_recurring'), todayRec, '', t('today.none_recurring')),
-        section(t('today.sec_soon'), soon, '', t('today.none_soon'))));
+        section(t('today.sec_overdue'), overdue, 'sec-red', t('today.none_overdue'), { quick: 'overdue' }),
+        section(t('today.sec_today'), todayList, '', t('today.none_today'), { quick: 'today' }),
+        section(t('today.sec_recurring'), todayRec, '', t('today.none_recurring'), { quick: 'today' }),
+        section(t('today.sec_soon'), soon, '', t('today.none_soon'), { from: addDays(today, 1), to: in3 })));
   }
 
   draw();

@@ -11,6 +11,7 @@ import * as calendarView from './calendar.js';
 import * as projectsView from './projects.js';
 import * as trashView from './trash.js';
 import * as weeklyView from './weekly.js';
+import * as summaryView from './summary.js';
 import { openDetail, closeDetail, isDetailOpen, setDetailBase } from './task-detail.js';
 import { registerServiceWorker, syncSubscription } from './push.js';
 import { bellButton, maybeShowPushPrompt, stopInboxChannel } from './notify-ui.js';
@@ -27,7 +28,8 @@ const ROUTES = {
   '/bugun': { view: todayView, nav: 'nav.today', icon: 'sun' },
   '/gorevler': { view: tasksView, nav: 'nav.tasks', icon: 'list' },
   '/takvim': { view: calendarView, nav: 'nav.calendar', icon: 'calendar' },
-  '/projeler': { view: projectsView, nav: 'nav.projects', icon: 'folder' },
+  '/projeler': { view: projectsView, nav: 'nav.projects', icon: 'folder', deskOnly: true },
+  '/ozet': { view: summaryView, nav: 'summary.title', icon: 'chart' },
   '/ice-aktar': { view: importView, nav: 'nav.import', icon: 'upload', admin: true, hidden: '/ayarlar' },
   '/cop': { view: trashView, nav: 'trash.title', icon: 'trash', admin: true, hidden: '/ayarlar' },
   '/haftalik': { view: weeklyView, nav: 'wk.title', icon: 'chart', hidden: '/bugun' },
@@ -87,7 +89,7 @@ function renderTopbar(activePath) {
   const links = Object.entries(ROUTES)
     .filter(([, r]) => (!r.admin || app.isAdmin) && !r.hidden)
     .map(([path, r]) => h('a', {
-      href: `#${path}`, class: `nav-link ${path === navPath ? 'active' : ''}`,
+      href: `#${path}`, class: `nav-link ${path === navPath ? 'active' : ''} ${r.deskOnly ? 'desk-only' : ''}`,
       'aria-current': path === navPath ? 'page' : null,
     }, icon(r.icon), h('span', { class: 'nav-text' }, t(r.nav))));
 

@@ -50,7 +50,7 @@ export async function render(root, ctx) {
     }).filter(Boolean);
     const done = [...doneTasks, ...doneOcc].sort((a, b) => (a._at < b._at ? 1 : -1));
     const open = tasks.filter((x) => x.status !== 'done' && mine(x));
-    const overdue = open.filter((x) => x.due_date && istanbulToDate(x.due_date, x.due_time) < now).sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
+    const overdue = open.filter((x) => x.recurrence === 'once' && x.due_date && istanbulToDate(x.due_date, x.due_time) < now).sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
     const week = open.filter((x) => x.due_date && x.due_date >= today && x.due_date <= sunday && !overdue.includes(x))
       .sort((a, b) => (`${a.due_date}${a.due_time}` < `${b.due_date}${b.due_time}` ? -1 : 1));
 

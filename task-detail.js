@@ -1,7 +1,7 @@
 // Görev detayı: sağdan açılan panel (telefonda tam ekran). Alan değişince otomatik kaydedilir.
 import { h, clear, icon, toast, confirmDialog } from './ui.js';
 import { t, getLang } from './i18n.js';
-import { label, VALUE_LABELS } from './excel-format.js';
+import { label, VALUE_LABELS, yearlyRepeat, totalHours, daysLeft, dueState, DUE_STATE_LABELS, formatRecurrenceDay, parseRecurrenceDay } from './excel-format.js';
 import { fmtDate, fmtDateTime, dueInfo } from './dates.js';
 import { supabase, friendlyError } from './supabase.js';
 import {
@@ -104,6 +104,18 @@ export function openDetail(id, ctx) {
   const allTasks = [...store.tasks.values()];
   const sectionCtl = bind('section', h('input', { class: 'input', list: listId('section') }), { validate: required });
   const categoryCtl = bind('category', h('input', { class: 'input', list: listId('category') }), { parse: nullIfEmpty });
+  const directorateCtl = bind('directorate', h('input', { class: 'input', list: listId('directorate') }), { parse: nullIfEmpty });
+  const codeCtl = bind('code', h('input', { class: 'input input-code', autocomplete: 'off', spellcheck: 'false' }), {
+    event: 'change', validate: required, parse: (v) => v.trim(),
+  });
+  if (!ctx.isAdmin) codeCtl.el.disabled = true;
+  const qtyCtl = bind('quantity', h('input', { class: 'input', type: 'number', min: 1, step: 1, inputmode: 'numeric' }), {
+    format: (v) => v || 1, parse: (v) => Math.max(1, Math.round(Number(v) || 1)),
+  });
+  const freqCtl = bind('freq_count', h('input', { class: 'input', type: 'number', min: 0, max: 31, step: 1, inputmode: 'numeric' }), {
+    format: (v) => (v ?? ''), parse: (v) => (v === '' ? null : Math.min(31, Math.max(0, Math.round(Number(v))))),
+  });
+  const freqWrap = h('div');
   const tagsCtl = bind('tags', h('input', { class: 'input', list: listId('tag') }), {
     event: 'change', format: (v) => (v || []).join(', '),
     parse: (v) => [...new Set(v.split(',').map((x) => x.trim()).filter(Boolean))],
@@ -124,27 +136,51 @@ export function openDetail(id, ctx) {
 
   function drawRecDay() {
     const tk = store.tasks.get(id);
-    clear(recDayWrap);
+    clear(recDayWrap); clear(freqWrap);
+    if (tk.recurrence !== 'once') {
+      const unit = { daily: 'detail.freq_day', weekdays: 'detail.freq_day', weekly: 'detail.freq_week', monthly: 'detail.freq_month', yearly: 'detail.freq_year' }[tk.recurrence];
+      freqWrap.append(field(t(unit), freqCtl, { help: t('detail.freq_help') }));
+    }
     if (tk.recurrence === 'weekly') {
-      const sel = h('select', { class: 'input', id: 'd-recday', disabled: !editable }, opt('', '—'),
-        Object.keys(VALUE_LABELS.weekday).map((k) => opt(k, label('weekday', k, lang), tk.recurrence_day === k)));
-      sel.addEventListener('change', () => updateTask(id, { recurrence_day: sel.value || null }));
-      recDayWrap.append(h('div', { class: 'field' }, h('label', { for: 'd-recday' }, t('detail.recurrence_day')), sel));
-    } else if (tk.recurrence === 'monthly') {
-      const inp = h('input', { class: 'input', id: 'd-recday', type: 'number', min: 1, max: 31, value: tk.recurrence_day || '', disabled: !editable });
+      const chosen = new Set((tk.recurrence_day || '').split(',').filter(Boolean));
+      const box = h('div', { class: 'day-checks', role: 'group', 'aria-label': t('detail.recurrence_day') },
+        Object.keys(VALUE_LABELS.weekday).map((k) => {
+          const cb = h('input', { type: 'checkbox', checked: chosen.has(k), disabled: !editable });
+          cb.addEventListener('change', () => {
+            if (cb.checked) chosen.add(k); else chosen.delete(k);
+            const order = Object.keys(VALUE_LABELS.weekday);
+            updateTask(id, { recurrence_day: [...chosen].sort((a, b) => order.indexOf(a) - order.indexOf(b)).join(',') || null });
+          });
+          return h('label', { class: 'day-check', title: label('weekday', k, lang) }, cb, h('span', {}, SHORT_DAYS[lang === 'en' ? 1 : 0][k]));
+        }));
+      recDayWrap.append(h('div', { class: 'field field-wide' }, h('span', { class: 'label' }, t('detail.recurrence_day')), box));
+    } else if (tk.recurrence === 'monthly' || tk.recurrence === 'yearly') {
+      const isM = tk.recurrence === 'monthly';
+      const inp = h('input', { class: 'input', id: 'd-recday', value: formatRecurrenceDay(tk.recurrence, tk.recurrence_day), disabled: !editable,
+        placeholder: isM ? '1, 15' : '01.03, 01.09', inputmode: isM ? 'numeric' : 'text' });
+      const err = h('p', { class: 'field-error', role: 'alert' });
       inp.addEventListener('change', () => {
-        const n = Math.min(31, Math.max(1, Math.round(Number(inp.value) || 1)));
-        inp.value = n; updateTask(id, { recurrence_day: String(n) });
+        const v = parseRecurrenceDay(tk.recurrence, inp.value);
+        if (v === undefined) { err.textContent = t(isM ? 'detail.monthday_invalid' : 'detail.yearday_invalid'); return; }
+        err.textContent = '';
+        updateTask(id, { recurrence_day: v || null });
       });
-      recDayWrap.append(h('div', { class: 'field' }, h('label', { for: 'd-recday' }, t('detail.recurrence_day_month')), inp));
+      recDayWrap.append(h('div', { class: 'field' }, h('label', { for: 'd-recday' }, t(isM ? 'detail.recurrence_day_month' : 'detail.recurrence_day_year')), inp, err,
+        h('p', { class: 'muted small' }, t(isM ? 'detail.monthday_help' : 'detail.yearday_help'))));
     }
   }
   recCtl.el.addEventListener('change', () => {
-    if (!['weekly', 'monthly'].includes(recCtl.el.value)) updateTask(id, { recurrence_day: null });
+    if (!['weekly', 'monthly', 'yearly'].includes(recCtl.el.value)) updateTask(id, { recurrence_day: null });
+    else updateTask(id, { recurrence_day: null });
     setTimeout(drawRecDay, 0);
   });
 
   const descCtl = bind('description', h('textarea', { class: 'input', rows: 4 }), { parse: nullIfEmpty });
+  const descLinks = h('ul', { class: 'refs' });
+  const drawDescLinks = () => {
+    const urls = [...new Set(String(store.tasks.get(id)?.description || '').match(/https?:\/\/[^\s)<>"']+/gi) || [])];
+    clear(descLinks).append(...urls.map((u) => h('li', {}, h('a', { href: u, target: '_blank', rel: 'noopener noreferrer' }, icon('link'), u))));
+  };
   autoGrow(descCtl.el);
   const refsCtl = bind('reference_links', h('textarea', { class: 'input', rows: 2, placeholder: 'https://…' }), {
     event: 'change', format: (v) => (v || []).join('\n'),
@@ -155,22 +191,40 @@ export function openDetail(id, ctx) {
   // ---- üst bilgi ve işlemler
   const headInfo = h('div', { class: 'drawer-headinfo' });
   const progressBox = h('div');
+  const calcBox = h('dl', { class: 'calc-box' });
   const metaLine = h('p', { class: 'muted small' });
   const conflictBox = h('div', { 'aria-live': 'assertive' });
   const actions = h('div', { class: 'row-wrap' });
+
+  // Maddesi olmayan, devam eden/beklemedeki görevde ilerleme elle seçilir (10'luk adım)
+  function manualProgress(tk) {
+    if (!editable || (store.checklist.get(id) || []).length || !['in_progress', 'waiting'].includes(tk.status)) return null;
+    const sel = h('select', { class: 'input input-sm', 'aria-label': t('tasks.col_progress') },
+      Array.from({ length: 10 }, (_, i) => i * 10).map((v) => opt(String(v), `${v}%`, Math.round((tk.progress || 0) / 10) * 10 === v)));
+    sel.addEventListener('change', () => updateTask(id, { progress: Number(sel.value) }));
+    return h('label', { class: 'row-gap small' }, h('span', { class: 'muted' }, t('detail.progress_manual')), sel);
+  }
 
   function drawHead() {
     const tk = store.tasks.get(id);
     if (!tk) return;
     const info = dueInfo(tk);
     clear(headInfo).append(
-      h('span', { class: 'muted' }, `#${tk.no}`),
+      h('span', { class: 'code-tag' }, tk.code || `#${tk.no}`),
       info ? h('span', { class: `due-tag due-${info.tone}` }, info.tone === 'overdue' ? icon('alert') : icon('clock'), info.text) : null);
     clear(progressBox).append(
       h('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': tk.progress, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': t('tasks.col_progress') },
         h('div', { class: 'progress-track' }, h('div', { class: 'progress-fill', style: `width:${tk.progress}%` })),
         h('span', { class: 'progress-text' }, `${tk.progress}%`)),
-      h('p', { class: 'muted small' }, t('detail.progress_auto')));
+      manualProgress(tk) || h('p', { class: 'muted small' }, t('detail.progress_auto')));
+    const ds = dueState(tk);
+    const dl = daysLeft(tk);
+    const L = lang === 'en' ? 1 : 0;
+    clear(calcBox).append(
+      h('div', {}, h('dt', {}, t('calc.days_left')), h('dd', {}, dl === null ? '—' : String(dl))),
+      h('div', {}, h('dt', {}, t('calc.due_state')), h('dd', {}, ds ? h('span', { class: `due-state ds-${ds}` }, DUE_STATE_LABELS[ds][L]) : '—')),
+      h('div', {}, h('dt', {}, t('calc.yearly_repeat')), h('dd', {}, String(Math.round(yearlyRepeat(tk) * 10) / 10).replace('.', ','))),
+      h('div', {}, h('dt', {}, t('calc.total_hours')), h('dd', {}, String(totalHours(tk)).replace('.', ','))));
     const who = store.profiles.find((p) => p.id === tk.updated_by)?.full_name || '—';
     metaLine.textContent = t('tasks.last_change', { who, when: fmtDateTime(tk.updated_at) });
     clear(refsView);
@@ -373,6 +427,7 @@ export function openDetail(id, ctx) {
       if (b.el.value !== String(v ?? '')) b.el.value = v ?? '';
     }
     drawHead();
+    drawDescLinks();
   }
 
   // ---- panel iskeleti
@@ -387,22 +442,28 @@ export function openDetail(id, ctx) {
       !editable ? h('p', { class: 'notice' }, icon('eye'), h('span', {}, t('detail.readonly'))) : null,
       actions,
       progressBox,
+      calcBox,
       h('div', { class: 'detail-grid' },
         field(t('tasks.col_status'), statusSel),
         field(t('tasks.col_priority'), prioCtl),
         field(t('tasks.col_project'), projCtl),
         field(t('tasks.assignee'), assCtl),
+        field(t('field.directorate'), directorateCtl),
         field(t('tasks.section'), sectionCtl),
         field(t('tasks.category'), categoryCtl),
+        field(t('field.code'), codeCtl),
         field(t('tasks.start'), startCtl),
         field(t('tasks.col_due'), dueCtl),
         field(t('detail.due_time'), timeCtl),
         field(t('detail.estimate'), estCtl),
+        field(t('field.quantity'), qtyCtl),
         field(t('tasks.recurrence'), recCtl),
+        freqWrap,
         recDayWrap,
         field(t('tasks.reminder'), remCtl),
         field(t('tasks.tags'), tagsCtl, { help: t('detail.tags_help') })),
       field(t('tasks.description'), descCtl, { wide: true }),
+      descLinks,
       checklistBox,
       occBox,
       files.el,
@@ -412,6 +473,7 @@ export function openDetail(id, ctx) {
       comments.el,
       historyDetails,
       metaLine,
+      datalist('directorate', [...store.lookups.filter((l) => l.kind === 'directorate').map((l) => l.value), ...allTasks.map((x) => x.directorate)]),
       datalist('section', [...store.lookups.filter((l) => l.kind === 'section').map((l) => l.value), ...allTasks.map((x) => x.section)]),
       datalist('category', [...store.lookups.filter((l) => l.kind === 'category').map((l) => l.value), ...allTasks.map((x) => x.category)]),
       datalist('tag', allTasks.flatMap((x) => x.tags || []))));
@@ -426,6 +488,7 @@ export function openDetail(id, ctx) {
 
   drawRecDay();
   drawHead();
+  drawDescLinks();
   drawChecklist();
   document.body.append(backdrop);
   document.body.classList.add('drawer-open');
@@ -451,6 +514,11 @@ function autoGrow(el) {
   setTimeout(grow, 0);
   setTimeout(grow, 120);
 }
+
+const SHORT_DAYS = [
+  { mon: 'Pzt', tue: 'Sal', wed: 'Çar', thu: 'Per', fri: 'Cum', sat: 'Cmt', sun: 'Paz' },
+  { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' },
+];
 
 // ---------------------------------------------------------------- yeni görev
 // Erteleme: 10 dk, 1 saat, yarın 09:00, gelecek hafta (pazartesi 09:00). O zaman yeniden bildirim gelir.
@@ -483,10 +551,27 @@ export function newTaskDialog(ctx) {
   const project = h('select', { class: 'input', id: 'nt-project' }, store.projects.map((p) => opt(p.id, p.name)));
   const sections = [...new Set([...store.lookups.filter((l) => l.kind === 'section').map((l) => l.value), ...[...store.tasks.values()].map((x) => x.section)].filter(Boolean))];
   const section = h('input', { class: 'input', id: 'nt-section', list: 'nt-sections', value: sections[0] || '' });
+  const dirs = [...new Set([...store.lookups.filter((l) => l.kind === 'directorate').map((l) => l.value), ...[...store.tasks.values()].map((x) => x.directorate)].filter(Boolean))];
+  const directorate = h('input', { class: 'input', id: 'nt-dir', list: 'nt-dirs', value: '' });
+  // Direktörlük seçilince ona bağlı ilk alt birim önerilir
+  directorate.addEventListener('change', () => {
+    const sub = store.lookups.find((l) => l.kind === 'section' && l.parent === directorate.value.trim());
+    if (sub) section.value = sub.value;
+  });
+  const codeHint = h('p', { class: 'muted small' });
+  const drawHint = () => {
+    const p = store.projects.find((x) => x.id === project.value);
+    codeHint.textContent = p?.code_prefix ? t('detail.code_auto', { p: p.code_prefix }) : t('detail.code_auto_none');
+  };
+  project.addEventListener('change', drawHint);
+  drawHint();
+
   const form = h('form', { class: 'form', method: 'dialog' },
     h('h2', { class: 'h2' }, t('tasks.new')),
     h('div', { class: 'field' }, h('label', { for: 'nt-title' }, t('detail.title')), title),
-    h('div', { class: 'field' }, h('label', { for: 'nt-project' }, t('tasks.col_project')), project),
+    h('div', { class: 'field' }, h('label', { for: 'nt-project' }, t('tasks.col_project')), project, codeHint),
+    h('div', { class: 'field' }, h('label', { for: 'nt-dir' }, t('field.directorate')), directorate,
+      h('datalist', { id: 'nt-dirs' }, dirs.map((s) => h('option', { value: s })))),
     h('div', { class: 'field' }, h('label', { for: 'nt-section' }, t('tasks.section')), section,
       h('datalist', { id: 'nt-sections' }, sections.map((s) => h('option', { value: s })))),
     msg,
@@ -497,7 +582,7 @@ export function newTaskDialog(ctx) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!title.value.trim() || !section.value.trim()) { msg.textContent = t('detail.required'); msg.className = 'form-msg form-msg-error'; return; }
-    const row = await createTask({ title: title.value.trim(), project_id: project.value, section: section.value.trim() });
+    const row = await createTask({ title: title.value.trim(), project_id: project.value, section: section.value.trim(), directorate: directorate.value.trim() || null });
     dlg.close();
     location.hash = `#/gorev/${row.id}`;
   });

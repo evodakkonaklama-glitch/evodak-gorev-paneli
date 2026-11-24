@@ -33,7 +33,7 @@ export async function render(root, ctx) {
       const left = Math.max(0, DAYS - age);
       return h('div', { class: 'trash-row' },
         h('div', { class: 'trash-main' },
-          h('div', { class: 'trash-title' }, h('span', { class: 'muted' }, `#${r.no} `), r.title),
+          h('div', { class: 'trash-title' }, h('span', { class: 'code-tag' }, r.code || `#${r.no}`), ' ', r.title),
           h('div', { class: 'muted small' }, [projectName(r.project_id), r.section].filter(Boolean).join(' · ')),
           h('div', { class: 'small' }, t('trash.deleted_info', { date: fmtDate(r.deleted_at.slice(0, 10)), who: personName(r.updated_by) || '—' }),
             ' · ', h('span', { class: left <= 3 ? 'text-red' : 'muted' }, t('trash.days_left', { n: left })))),
@@ -58,7 +58,7 @@ export async function render(root, ctx) {
 
   async function load() {
     clear(list).append(spinner());
-    const { data, error } = await supabase.from('tasks').select('id,no,title,project_id,section,deleted_at,updated_by')
+    const { data, error } = await supabase.from('tasks').select('id,no,code,title,project_id,section,deleted_at,updated_by')
       .not('deleted_at', 'is', null).order('deleted_at', { ascending: false }).limit(1000);
     if (error) { clear(list).append(h('p', { class: 'form-msg form-msg-error' }, t('trash.err'))); return; }
     rows = data; draw();

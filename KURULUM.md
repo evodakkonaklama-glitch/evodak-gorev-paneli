@@ -426,20 +426,69 @@ Bu noktada **Takvim → Gantt** ve **Takvim → Plan** çalışır.
 
 ---
 
+## PAKET 9 – Yeni görev Excel'i (ERA "Görev Takip") uyarlaması
+
+Panel artık ERA biçimindeki Excel'i (25 sütun, 3.265 görev) okuyup yazar. Her satır ayrı bir görevdir; **ID** (ör. GTP-001) görevin kodudur. Direktörlük / Alt Birim / Görev-Fonksiyon alanları, Adet, sıklık sayısı ve yıllık iş yükü saatleri eklendi. Yeni **Özet** ekranı, Excel'deki "Özet Panel" sayfasının karşılığıdır.
+
+> Sıra önemli: önce A (SQL), sonra B (fonksiyonlar), sonra C (GitHub), en son D (Excel'i yükleme).
+
+### A. Supabase: SQL
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `010_era.sql` dosyasının tamamını yapıştırın → **Run**. Altta **Success. No rows returned** yazmalı. (İki kez çalıştırılırsa zarar vermez.)
+
+### B. Supabase: üç fonksiyonu güncelleyin
+Her biri için: **Edge Functions →** fonksiyon adı **→ Code** sekmesi → içindekini tamamen silin → ilgili `.txt` dosyasının içeriğini yapıştırın → **Deploy updates**.
+1. `send-reminders` ← `send-reminders-kodu.txt` (bildirimde görev kodu; 3.000+ görevde günlük/haftalık özet doğru sayılır)
+2. `maintenance` ← `maintenance-kodu.txt` (haftalık yedeğin Excel'i ERA biçiminde; yedekte satır kayması düzeltildi)
+3. `google-tasks` ← `google-tasks-kodu.txt` (Google'daki görev notunda kod)
+JWT ayarlarına dokunmayın (kapalı kalmalı).
+
+### C. GitHub
+`evodak-gorev-paneli-paket9.zip` içindeki **tüm dosyaları** yükleyin (**Add file → Upload files → Commit changes**). Yeni dosyalar: `summary.js`, `010_era.sql`. Panelde "Panelin yeni sürümü yüklendi – Yenile" çıkınca **Yenile**'ye basın (çıkmazsa Ctrl+F5). Ayarlar → Uygulama'da sürüm **9.0** görünmeli.
+
+### D. ERA Excel'ini yükleyin (yalnızca Hakan, bir kez)
+1. **Ayarlar → Veri ve yedek → Excel içe aktar** → `ERA_Gorev_Takip12.11.26_1335.xlsx` dosyasını seçin.
+2. Önizlemede şunlar görünmeli: **Eklenecek 3265**, **Hatalı 0**, Direktörlük **11**, Projeler **23 (+2)** (yeni: *Evodak Birim İşleri* ve *Evodak Organizasyon Çalışma Programı*).
+3. **"Panelde olup bu dosyada olmayan … görevi çöp kutusuna taşı"** kutusunu işaretleyin. (Eski 588 görev aynı işleri madde olarak içerdiği için kopya kalmasın diye. Önce otomatik yedek alınır; eskiler 30 gün çöp kutusunda durur.)
+4. **"Şablonları bu dosyadan yeniden oluştur"** işaretli kalsın (Web 111, Panel 50, İş Planı 22 adım).
+5. **3265 görevi içe aktar → Yedek al ve değiştir**. Birkaç saniye sürer; sayfayı kapatmayın.
+6. Bittiğinde **Özet**'e basın.
+
+### E. Deneyin
+- **Özet:** Toplam 3.265; direktörlük tablosunda Ar-Ge & İş Geliştirme 2.146, Pazarlama & İletişim 795, Saha Operasyonları 222; iş yükü toplamı **11.008,6 saat** (Excel'deki Özet Panel ile aynı). Satıra dokununca o direktörlüğün görevleri açılır. Üstte Direktörlük / Proje / Kişi sekmeleri.
+- **Görevler:** ilk sütun ID (ALT-001…). Liste 100'erli yüklenir, aşağı kaydırdıkça devamı gelir. **Filtre**: Direktörlük, Alt Birim, Görev / Fonksiyon, Tekrar Tipi, Termin durumu; en altta **Grupla** (Direktörlük / Proje / Görev-Fonksiyon). Aramaya "ORG-37" yazın.
+- **Toplu işlem (Hakan, Gamze):** satır başındaki kutuları işaretleyin (veya "Listedeki … görevin hepsini seç") → sorumlu / öncelik / durum / hatırlatma / termin seçin → **Uygula**. Örnek: *Pazarlama & İletişim* direktörlüğünü filtreleyip hepsini Gamze'ye atayın.
+- **Görev detayı:** başlıkta ID; Direktörlük, Adet, "Haftada kaç kez"; tekrar günleri kutucuklu (Pzt Sal Çar …); altta Kalan gün, Termin durumu, Yıllık tekrar, Toplam saat.
+- **Yeni görev:** projeyi seçince "Kod otomatik verilir (GTP-…)" yazar; kaydedince GTP-055 gibi kod alır.
+- **Takvim → Gantt:** Direktörlük / Proje gruplaması; çok görevde gruplar kapalı başlar, başlığa dokunup açın.
+- **Projeler → Yeni proje:** **Kod öneki** alanı (ör. MGW). Türlerde **Program** ve **Birim İşleri** de var.
+- **Excel'e aktar:** dosya adı `Evodak_Gorev_Takip_GG.AA.YYYY.xlsx`; Excel'inizle aynı düzende (25 sütun + Hatırlatma, Tekrar Günü, Etiketler, Referans, Kontrol Listesi) ve Listeler + Özet Panel sayfalarıyla. Bu dosyayı düzenleyip geri yükleyebilirsiniz; ID'ye göre güncellenir.
+
+### Bilmeniz gerekenler
+- **Sorumlu sütunu Excel'de boş:** Görevler atanmadan yüklenir. Bu yüzden hatırlatmalar Hakan ve Gamze'ye gider ve Google Tasks'a görev gitmez. Toplu işlemle sorumlu atayın.
+- **Hatırlatma:** Excel'de hatırlatma sütunu yok; görevler "Hatırlatma: Yok" yüklenir. Günlük özet yine gelir. İstediğiniz görevlerde (veya toplu işlemle) hatırlatmayı açın.
+- **Tekrarlayan rutin işler** (Günlük/Haftalık/Aylık/Yıllık, 1.050 iş): Excel'deki gibi gecikmiş sayılmaz. Başlangıç tarihi olanlar tarihlenir ve günü gelince **Bugün → Bugün tekrarlananlar**'da görünür. Başlangıç tarihi olmayanlar (Excel'de tarihsiz) tarihsiz kalır; başlangıç tarihi girince planlanır.
+- **"Haftada 2"** gibi sıklıkta gün yazmıyorsa Pazartesi + Perşembe (3 ise Pzt + Çar + Cum), "Ayda 2" ise ayın 1'i ve 15'i varsayılır. Notlar'da "Tekrar: Her hafta (Cuma)" yazıyorsa o gün kullanılır.
+- **Öncelik boş** olan 1.235 görev "Orta" sayılır (Excel'in Özet Panel'inde Orta 515 görünür, boşları saymaz).
+- **Geri almak isterseniz:** Ayarlar → Veri ve yedek → Excel içe aktar sayfasındaki **Geri al**: yeni görevler silinir, çöpe taşınan eski görevler geri gelir.
+
+---
+
 ## Günlük kullanım (kısa)
 
 | Ne yapmak istiyorsunuz? | Nerede? |
 |---|---|
 | Bugün ne var, ne gecikti, öncelikli işler | **Bugün** |
+| Direktörlük / proje / kişi bazında durum ve iş yükü (saat) | **Özet** |
 | Geçen hafta / bu hafta | **Bugün → Haftalık özet** |
-| Görev aramak, filtrelemek, Kanban | **Görevler** |
+| Görev aramak (ID ile de), filtrelemek, gruplamak, Kanban, toplu atama | **Görevler** |
 | Tarihe göre görmek, tarih sürüklemek | **Takvim** (Gün / Hafta / Ay) |
 | Proje zaman çizelgesi | **Takvim → Gantt** |
 | Günü saat saat planlamak | **Takvim → Plan** |
 | Google Tasks bağlantısı | **Ayarlar → Google Tasks** |
-| Proje durumu, yeni proje | **Projeler** |
+| Proje durumu, yeni proje (kod öneki) | **Projeler** (telefonda Özet → Projeler) |
 | Kişi ekleme, rol, şifre | **Ayarlar → Kişiler** |
-| Proje, bölüm, kategori listeleri | **Ayarlar → Listeler** |
+| Proje, direktörlük, alt birim, görev/fonksiyon listeleri | **Ayarlar → Listeler** |
 | Şablon düzenleme, günlük çalışma süresi | **Ayarlar → Şablonlar** |
 | Excel içe/dışa aktarma, yedek, çöp kutusu | **Ayarlar → Veri ve yedek** |
 | Bildirim saatleri, test bildirimi | **Ayarlar → Bildirimler** |
@@ -455,6 +504,8 @@ Bu noktada **Takvim → Gantt** ve **Takvim → Plan** çalışır.
 - **"Google bağlantısı henüz kurulmadı" uyarısı:** Paket 8 G adımındaki iki Secret eksik veya `google-tasks` fonksiyonu yüklenmemiş.
 - **Google ile girişte "redirect_uri_mismatch":** Paket 8 F-4'teki iki adres tam olarak (sonundaki / dahil) yazılmalı.
 - **Google ile giriş sonrası "Hesabınız ekibe eklenmemiş":** O e-posta Ayarlar → Kişiler'de kayıtlı değil.
+- **Excel içe aktarmada "Zorunlu sütun eksik: ID":** Dosyada "Görev Takip" sayfası ve 4. satırda "ID" başlığı olmalı.
+- **İçe aktarmada "Yedek alınamadı":** Paket 9 B-2 (maintenance) güncellenmemiş olabilir; yeniden deneyin.
 - Diğer her sorunda ekran görüntüsünü bana gönderin.
 
 ---

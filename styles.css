@@ -835,3 +835,97 @@ input[type=file]:focus-visible + .file-drop { box-shadow: var(--focus); }
   .tb-grid { max-height: 60vh; }
   .cal-views .seg-btn { padding: 6px 9px; }
 }
+
+/* ---------- Paket 9: ERA uyarlaması ---------- */
+.code-tag {
+  display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .74rem; letter-spacing: .01em;
+  color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap;
+}
+.c-no { width: 96px; }
+.c-sel { width: 34px; }
+.c-sel input, .check-row input { width: 18px; height: 18px; accent-color: var(--navy); }
+.task-row.is-selected td { background: var(--amber-soft); }
+.due-state { display: inline-block; font-size: .72rem; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+.ds-overdue { background: var(--red-bg); color: var(--red-text); }
+.ds-soon { background: var(--amber-bg); color: var(--amber-text); }
+.ds-scheduled { background: var(--surface-2); color: var(--muted); }
+
+.stats-6 { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 1100px) { .stats-6 { grid-template-columns: repeat(3, 1fr); } }
+.stat-btn { cursor: pointer; text-align: left; font: inherit; border: 1px solid transparent; }
+.stat-btn:hover { border-color: var(--line-2); }
+
+.bulk-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px;
+  background: var(--amber-soft); border: 1px solid var(--amber-bg); border-radius: var(--radius);
+}
+.bulk-fields { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+.bulk-fields .input-sm { min-height: 36px; max-width: 170px; }
+
+.group-row th { background: var(--surface-2); padding: 0; text-align: left; position: sticky; top: 0; z-index: 1; }
+.group-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; background: none;
+  font: inherit; font-weight: 700; color: var(--text); cursor: pointer; text-align: left;
+}
+.group-btn:hover { background: var(--hover); }
+.load-more { display: flex; align-items: center; gap: 12px; justify-content: center; padding: 14px 0 4px; flex-wrap: wrap; }
+
+.kcard-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 4px; }
+
+.calc-box { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 4px; }
+.calc-box > div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.calc-box dt { font-size: .72rem; color: var(--muted); }
+.calc-box dd { margin: 2px 0 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.day-checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.day-check { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: .85rem; }
+.day-check:has(input:checked) { border-color: var(--navy); background: var(--surface-2); font-weight: 600; }
+.field .label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; }
+.input-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-transform: uppercase; }
+
+.sum-grid { display: grid; grid-template-columns: minmax(240px, 1fr) 2.2fr; gap: 20px; align-items: start; }
+@media (max-width: 1000px) { .sum-grid { grid-template-columns: 1fr; } }
+.simple-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.simple-table th.num { text-align: right; }
+.simple-table tfoot th, .simple-table tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
+.simple-table .strong { font-weight: 700; }
+.sum-table th[scope="row"] { font-weight: 600; text-align: left; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--link); cursor: pointer; text-align: left; }
+.link-btn:hover { text-decoration: underline; }
+
+.check-row { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.check-row input { margin-top: 2px; flex: none; }
+.block { display: block; }
+.card-warn { border: 1px solid var(--amber-bg); background: var(--amber-soft); }
+.plain-list { margin: 8px 0; padding-left: 18px; }
+.progress-wide { width: min(420px, 100%); margin: 12px auto; }
+
+.gt-group-btn { display: flex; align-items: center; gap: 6px; border: 0; background: none; font: inherit; font-weight: 700; cursor: pointer; text-align: left; color: var(--text); }
+.gt-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gt-sum {
+  position: absolute; top: 50%; height: 10px; margin-top: -5px; border-radius: 5px; background: var(--line-2); overflow: hidden;
+}
+.gt-sum .gt-fill { position: absolute; inset: 0 auto 0 0; background: var(--green); opacity: .8; }
+.gt-sum.is-overdue { box-shadow: 0 0 0 2px var(--red); }
+
+@media (max-width: 700px) {
+  .nav-link.desk-only { display: none; }
+  .stats-6 { grid-template-columns: repeat(2, 1fr); }
+  .calc-box { grid-template-columns: repeat(2, 1fr); }
+  .task-table .c-no { display: block; grid-column: 1 / -1; }
+  .task-table .c-sel { position: absolute; top: 10px; right: 12px; width: auto; }
+  .task-table tr.task-row:has(.c-sel) .c-title { padding-right: 28px; }
+  .task-table tr.group-row { display: block; margin: 14px 0 8px; }
+  .task-table tr.group-row th { display: block; position: static; background: none; }
+  .group-btn { padding: 6px 2px; }
+  .bulk-fields { margin-left: 0; width: 100%; }
+  .bulk-fields .input-sm { max-width: none; flex: 1 1 45%; }
+}
+:root[data-theme="dark"] .task-row.is-selected td { background: rgba(185, 119, 14, .15); }
+:root[data-theme="dark"] .bulk-bar, :root[data-theme="dark"] .card-warn { background: rgba(185, 119, 14, .12); border-color: rgba(185, 119, 14, .35); }
+@media (max-width: 700px) {
+  .table-wrap.table-scroll { overflow-x: auto; background: var(--card); box-shadow: var(--shadow); -webkit-overflow-scrolling: touch; }
+  .sum-table { min-width: 640px; }
+}
+.sum-grid > div { min-width: 0; }
+#listeler .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+#listeler .seg-btn { flex: none; }
