@@ -39,7 +39,7 @@ function passwordCard() {
     form);
 }
 
-const SW_VERSION_LABEL = '10.0';
+const SW_VERSION_LABEL = '10.0.1';
 
 function aboutCard() {
   const btn = h('button', { class: 'btn btn-sm', type: 'button' }, icon('refresh'), t('about.check'));

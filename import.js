@@ -11,7 +11,8 @@ import { callFn } from './people.js';
 
 const MAX_FILE = 15 * 1024 * 1024;
 const LIST_LIMIT = 100;
-const CHUNK = 500;
+const CHUNK = 150;       // Supabase'in 8 sn işlem sınırının rahatça altında kalsın
+const MIN_SPLIT = 1;     // hata veren parça tek görev kalana kadar bölünür
 
 let ctxRef = null;
 
@@ -279,20 +280,34 @@ async function save(page, parsed, diff, { replace, templates }) {
       step++;
     }
 
-    // 2) Görevler 500'erli parçalarla (aynı içe aktarma oturumu)
+    // 2) Görevler 150'şerli parçalarla (aynı içe aktarma oturumu).
+    //    Bir parça hata verirse ikiye bölünüp yeniden denenir (süre aşımı çoğu zaman böyle çözülür);
+    //    tek göreve kadar inen hata, görev koduyla birlikte gösterilir.
     let batchId = null;
     let inserted = 0; let updated = 0; let noAssignee = 0; let renamed = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      set(step, steps, t('import.step_chunk', { i: i + 1, n: chunks.length }));
-      const { data, error } = await supabase.rpc('import_excel', { p: { ...chunks[i], batch_id: batchId } });
+    const queue = chunks.map((c) => ({ ...c }));
+    let done = 0;
+    const total = parsed.tasks.length || 1;
+    while (queue.length) {
+      const cur = queue.shift();
+      set(Math.min(step + (done / total) * chunks.length, steps), steps, t('import.step_tasks', { n: done, total: parsed.tasks.length }));
+      const { data, error } = await supabase.rpc('import_excel', { p: { ...cur, batch_id: batchId } });
       if (error) {
+        if (cur.tasks.length > MIN_SPLIT) {
+          const half = Math.ceil(cur.tasks.length / 2);
+          queue.unshift({ ...cur, tasks: cur.tasks.slice(half), projects: [], lookups: [], people: [] });
+          queue.unshift({ ...cur, tasks: cur.tasks.slice(0, half) });
+          continue;
+        }
         if (batchId) await supabase.rpc('undo_import', { p_batch: batchId });   // yarım kalmasın
-        throw error;
+        const code = cur.tasks[0]?.code;
+        throw new Error(t('import.row_failed', { code: code || '—', msg: [error.message, error.details, error.hint].filter(Boolean).join(' · ') }));
       }
       batchId = data.batch_id;
       inserted += data.inserted; updated += data.updated; noAssignee += data.no_assignee || 0; renamed += (data.renamed || []).length;
-      step++;
+      done += cur.tasks.length;
     }
+    step += chunks.length;
 
     // 3) Dosyada olmayanlar çöp kutusuna
     let trashed = 0;

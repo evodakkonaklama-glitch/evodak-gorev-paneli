@@ -1430,6 +1430,8 @@ Object.assign(dict.tr, {
   'detail.co_help': 'Ek sorumlular da hatırlatma ve yorum bildirimi alır; üye rolündeyse görevi düzenleyebilir.',
   'bulk.add_co': 'Ek sorumlu ekle', 'bulk.clear_co': '— Ek sorumluları kaldır —',
   'import.co_tasks': 'Çoklu sorumlu', 'import.renames': 'Adı değişecek projeler',
+  'import.step_tasks': 'Görevler yükleniyor: {n} / {total}…',
+  'import.row_failed': 'İçe aktarma durduruldu ve geri alındı. Sorunlu görev: {code}. Sunucu yanıtı: {msg}',
   'import.done_renamed': '{n} projenin adı güncellendi.', 'import.done_archived': 'Görevi kalmayan {n} proje arşive alındı.',
 });
 Object.assign(dict.en, {
@@ -1437,6 +1439,8 @@ Object.assign(dict.en, {
   'detail.co_help': 'Co-assignees also get reminders and comment notifications; members can edit the task.',
   'bulk.add_co': 'Add co-assignee', 'bulk.clear_co': '— Remove co-assignees —',
   'import.co_tasks': 'Multiple assignees', 'import.renames': 'Projects to be renamed',
+  'import.step_tasks': 'Importing tasks: {n} / {total}…',
+  'import.row_failed': 'Import stopped and was undone. Problem task: {code}. Server response: {msg}',
   'import.done_renamed': '{n} projects renamed.', 'import.done_archived': '{n} projects without tasks were archived.',
 });
 

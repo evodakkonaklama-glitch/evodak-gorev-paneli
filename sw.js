@@ -2,7 +2,7 @@
 // 1) Uygulama kapalıyken gelen bildirimi gösterir, bildirim düğmelerini oturumsuz çalıştırır,
 //    bildirime dokununca paneli ilgili görevde açar.
 // 2) Uygulama dosyalarını önbelleğe alır: internet yokken de panel açılır (veriler IndexedDB'den).
-const SW_VERSION = '10.0.0';
+const SW_VERSION = '10.0.1';
 const CACHE = `evodak-${SW_VERSION}`;
 // Herkese açık panel anahtarı (config.js ile aynı; gizli değildir).
 // Supabase işlev kapısı, bildirim düğmesi çağrısında bunu ister.
