@@ -308,7 +308,9 @@ async function processSummary(profile: Profile, row: Row, subs: Sub[]) {
     const q = db.from('tasks').select('id,title,due_date,due_time,start_date,status,assignee_id,recurrence')
       .is('deleted_at', null).not('status', 'in', '(done,cancelled)')
       .or(`due_date.lte.${in3},start_date.eq.${today}`);
-    return sees ? q.or(`assignee_id.eq.${profile.id},assignee_id.is.null`) : q.eq('assignee_id', profile.id);
+    // Kişinin görevleri: ana veya ek sorumlu; yönetici ayrıca kimseye atanmamışları görür
+    const own = `assignee_id.eq.${profile.id},co_assignee_ids.cs.{${profile.id}}`;
+    return q.or(sees ? `${own},and(assignee_id.is.null,co_assignee_ids.eq.{})` : own);
   });
   if (error) { await finish([row.id], 'failed', error.message); return; }
   // Gecikme yalnızca tek seferlik görevlerde (tekrarlayan rutinler "bugün" listesine girer)
@@ -344,7 +346,7 @@ async function processWeekly(profile: Profile, row: Row, subs: Sub[]) {
   const weekEnd = iso(new Date(ist.getTime() + 6 * 86400000));
   const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
   const sees = ['owner', 'admin'].includes(profile.role ?? '') && !profile.only_own_tasks;
-  const mine = `assignee_id.eq.${profile.id}${sees ? ',assignee_id.is.null' : ''}`;
+  const mine = `assignee_id.eq.${profile.id},co_assignee_ids.cs.{${profile.id}}${sees ? ',and(assignee_id.is.null,co_assignee_ids.eq.{})' : ''}`;
   const { data: open, error: e1 } = await pagedSelect(() => db.from('tasks').select('id,title,due_date,due_time,recurrence')
     .is('deleted_at', null).not('status', 'in', '(done,cancelled)').lte('due_date', weekEnd).or(mine));
   if (e1) { await finish([row.id], 'failed', e1.message); return; }

@@ -21,6 +21,7 @@ Kurulum için **[KURULUM.md](KURULUM.md)** dosyasına bakın. Koddaki tek düzen
 | 7 | Listeler, şablon önizleme ve tarih planlama, yorumlar, 4'lü erteleme, öncelikli işler, haftalık özet, yedekten geri yükleme, tüm cihazlardan çıkış, kullanılmama uyarısı | ✅ |
 | 8 | Gantt, zaman bloklama (Plan), Google ile giriş, Google Tasks eşitleme | ✅ |
 | 9 | ERA Excel uyarlaması: görev kodu (ID), direktörlük, adet/sıklık, yıllık iş yükü, Özet ekranı, 25 sütun içe/dışa aktarma, toplu işlem, gruplama, 3.000+ görevde hızlı liste | ✅ |
+| 10 | Birden çok sorumlu (ana + ek sorumlular: yetki, bildirim, Google Tasks, Excel), Sınıf alanı, içe aktarmada proje yeniden adlandırma | ✅ |
 
 ## Klasörler
 
@@ -33,7 +34,7 @@ Tüm dosyalar deponun ana dizinindedir (GitHub'a sürükle-bırak ile kolay yük
 - Dosyalar: files.js
 - Veri katmanı: store.js (otomatik kayıt, çakışma, Realtime), idb.js (çevrimdışı kopya ve kuyruk)
 - Bildirim: sw.js, push.js, notify-ui.js, manifest.webmanifest, simgeler (*.png)
-- Veritabanı: 001_schema.sql … 010_era.sql (Supabase SQL Editor'de sırayla çalıştırılır)
+- Veritabanı: 001_schema.sql … 011_coklu_sorumlu.sql (Supabase SQL Editor'de sırayla çalıştırılır)
 - Sunucu (Supabase Edge Functions, JWT doğrulama kapalı): send-reminders.ts, notification-action.ts, manage-users.ts, maintenance.ts, google-tasks.ts
 
 ## Güvenlik

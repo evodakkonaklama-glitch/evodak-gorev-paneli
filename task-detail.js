@@ -32,7 +32,8 @@ export function closeDetail(navigate = true) {
 }
 
 function canEditTask(ctx, task) {
-  return ctx.isAdmin || (ctx.profile.role === 'member' && task.assignee_id === ctx.profile.id);
+  return ctx.isAdmin || (ctx.profile.role === 'member'
+    && (task.assignee_id === ctx.profile.id || (task.co_assignee_ids || []).includes(ctx.profile.id)));
 }
 
 const opt = (value, text, selected) => h('option', { value, selected: selected ? true : null }, text);
@@ -99,8 +100,29 @@ export function openDetail(id, ctx) {
     store.profiles.filter((p) => p.active !== false).map((p) => opt(p.id, p.full_name))), { event: 'change', parse: nullIfEmpty });
   if (isMember) { projCtl.el.disabled = true; assCtl.el.disabled = true; }
 
+  // Ek sorumlular: ana sorumlu dışındaki kişiler kutucukla seçilir
+  const coWrap = h('div', { class: 'field field-wide' });
+  function drawCo() {
+    const tk = store.tasks.get(id);
+    if (!tk) return;
+    const chosen = new Set(tk.co_assignee_ids || []);
+    const people = store.profiles.filter((p) => (p.active !== false || chosen.has(p.id)) && p.id !== tk.assignee_id);
+    clear(coWrap).append(h('span', { class: 'label' }, t('field.co_assignees')),
+      people.length ? h('div', { class: 'day-checks', role: 'group', 'aria-label': t('field.co_assignees') }, people.map((p) => {
+        const cb = h('input', { type: 'checkbox', checked: chosen.has(p.id), disabled: !ctx.isAdmin });
+        cb.addEventListener('change', () => {
+          if (cb.checked) chosen.add(p.id); else chosen.delete(p.id);
+          updateTask(id, { co_assignee_ids: [...chosen] });
+        });
+        return h('label', { class: 'day-check' }, cb, h('span', {}, p.full_name));
+      })) : h('p', { class: 'muted small' }, '—'),
+      h('p', { class: 'muted small' }, t('detail.co_help')));
+  }
+  assCtl.el.addEventListener('change', () => setTimeout(drawCo, 0));
+
   const listId = (kind) => `dl-${kind}`;
   const datalist = (kind, values) => h('datalist', { id: listId(kind) }, [...new Set(values.filter(Boolean))].map((v) => h('option', { value: v })));
+  const classCtl = bind('task_class', h('input', { class: 'input', list: listId('task_class') }), { parse: nullIfEmpty });
   const allTasks = [...store.tasks.values()];
   const sectionCtl = bind('section', h('input', { class: 'input', list: listId('section') }), { validate: required });
   const categoryCtl = bind('category', h('input', { class: 'input', list: listId('category') }), { parse: nullIfEmpty });
@@ -377,6 +399,7 @@ export function openDetail(id, ctx) {
     if (fieldName === 'due_time') return String(v).slice(0, 5);
     if (fieldName === 'project_id') return store.projects.find((p) => p.id === v)?.name || '?';
     if (fieldName === 'assignee_id') return store.profiles.find((p) => p.id === v)?.full_name || '?';
+    if (fieldName === 'co_assignee_ids') return (v || []).map((x) => store.profiles.find((p) => p.id === x)?.full_name || '?').join(' / ') || '—';
     if (fieldName === 'progress') return `%${v}`;
     if (Array.isArray(v)) return v.join(', ') || '—';
     const s = String(v);
@@ -428,6 +451,7 @@ export function openDetail(id, ctx) {
     }
     drawHead();
     drawDescLinks();
+    drawCo();
   }
 
   // ---- panel iskeleti
@@ -448,8 +472,10 @@ export function openDetail(id, ctx) {
         field(t('tasks.col_priority'), prioCtl),
         field(t('tasks.col_project'), projCtl),
         field(t('tasks.assignee'), assCtl),
+        coWrap,
         field(t('field.directorate'), directorateCtl),
         field(t('tasks.section'), sectionCtl),
+        field(t('field.task_class'), classCtl),
         field(t('tasks.category'), categoryCtl),
         field(t('field.code'), codeCtl),
         field(t('tasks.start'), startCtl),
@@ -473,6 +499,7 @@ export function openDetail(id, ctx) {
       comments.el,
       historyDetails,
       metaLine,
+      datalist('task_class', allTasks.map((x) => x.task_class)),
       datalist('directorate', [...store.lookups.filter((l) => l.kind === 'directorate').map((l) => l.value), ...allTasks.map((x) => x.directorate)]),
       datalist('section', [...store.lookups.filter((l) => l.kind === 'section').map((l) => l.value), ...allTasks.map((x) => x.section)]),
       datalist('category', [...store.lookups.filter((l) => l.kind === 'category').map((l) => l.value), ...allTasks.map((x) => x.category)]),
@@ -489,6 +516,7 @@ export function openDetail(id, ctx) {
   drawRecDay();
   drawHead();
   drawDescLinks();
+  drawCo();
   drawChecklist();
   document.body.append(backdrop);
   document.body.classList.add('drawer-open');

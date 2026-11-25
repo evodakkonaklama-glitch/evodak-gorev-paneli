@@ -1424,6 +1424,22 @@ Object.assign(dict.en, {
   'summary.load_help': 'Duration × Quantity × Repeats per year ÷ 60 (day = 6/week, week = 4.2/month, 12 months).',
 });
 
+// ---------------------------------------------------------------- Paket 10 (çoklu sorumlu, Sınıf)
+Object.assign(dict.tr, {
+  'field.co_assignees': 'Ek sorumlular', 'field.co_assignee_ids': 'Ek sorumlular', 'field.task_class': 'Sınıf',
+  'detail.co_help': 'Ek sorumlular da hatırlatma ve yorum bildirimi alır; üye rolündeyse görevi düzenleyebilir.',
+  'bulk.add_co': 'Ek sorumlu ekle', 'bulk.clear_co': '— Ek sorumluları kaldır —',
+  'import.co_tasks': 'Çoklu sorumlu', 'import.renames': 'Adı değişecek projeler',
+  'import.done_renamed': '{n} projenin adı güncellendi.', 'import.done_archived': 'Görevi kalmayan {n} proje arşive alındı.',
+});
+Object.assign(dict.en, {
+  'field.co_assignees': 'Co-assignees', 'field.co_assignee_ids': 'Co-assignees', 'field.task_class': 'Class',
+  'detail.co_help': 'Co-assignees also get reminders and comment notifications; members can edit the task.',
+  'bulk.add_co': 'Add co-assignee', 'bulk.clear_co': '— Remove co-assignees —',
+  'import.co_tasks': 'Multiple assignees', 'import.renames': 'Projects to be renamed',
+  'import.done_renamed': '{n} projects renamed.', 'import.done_archived': '{n} projects without tasks were archived.',
+});
+
 const listeners = new Set();
 let current = (() => {
   try {

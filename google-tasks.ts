@@ -147,8 +147,12 @@ async function syncProfile(profileId: string) {
   // 2) Eşlemeler ve panel görevleri
   const { data: links } = await db.from('google_task_links').select('task_id,google_task_id,synced_version').eq('profile_id', profileId);
   const linkMap = new Map((links ?? []).map((l) => [l.task_id, l]));
-  const cols = 'id,code,title,section,project_id,due_date,status,assignee_id,deleted_at,version,recurrence';
-  const { data: mine } = await db.from('tasks').select(cols).eq('assignee_id', profileId).is('deleted_at', null).not('status', 'in', '(done,cancelled)').limit(1000);
+  const cols = 'id,code,title,section,project_id,due_date,status,assignee_id,co_assignee_ids,deleted_at,version,recurrence';
+  // Kişinin görevleri: ana veya ek sorumlu olduğu açık görevler
+  const { data: mine } = await db.from('tasks').select(cols).or(`assignee_id.eq.${profileId},co_assignee_ids.cs.{${profileId}}`)
+    .is('deleted_at', null).not('status', 'in', '(done,cancelled)').limit(1000);
+  // deno-lint-ignore no-explicit-any
+  const isMine = (t: any) => t.assignee_id === profileId || (t.co_assignee_ids ?? []).includes(profileId);
   const linkedIds = [...linkMap.keys()];
   const linked: Task[] = [];
   for (let i = 0; i < linkedIds.length; i += 200) {
@@ -190,7 +194,7 @@ async function syncProfile(profileId: string) {
       linkMap.delete(taskId);
       continue;
     }
-    if (g.status === 'completed' && t && !t.deleted_at && !['done', 'cancelled'].includes(t.status) && t.assignee_id === profileId) {
+    if (g.status === 'completed' && t && !t.deleted_at && !['done', 'cancelled'].includes(t.status) && isMine(t)) {
       const { data: res } = await db.rpc('gtasks_complete', { p_task: taskId, p_profile: profileId });
       if (res === 'done' || res === 'recurring') completedFromGoogle++;
       const { data: fresh } = await db.from('tasks').select(cols).eq('id', taskId).maybeSingle();
@@ -208,7 +212,7 @@ async function syncProfile(profileId: string) {
   for (const t of byId.values()) {
     if (ctx.ops >= MAX_OPS) break;
     const link = linkMap.get(t.id);
-    const active = !t.deleted_at && t.assignee_id === profileId && t.status !== 'cancelled';
+    const active = !t.deleted_at && isMine(t) && t.status !== 'cancelled';
     if (!active) {
       if (link) {
         await gapi(ctx, 'DELETE', `${L}/tasks/${encodeURIComponent(link.google_task_id)}`);

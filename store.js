@@ -41,7 +41,7 @@ let dataTimer = null;
 function emitData() { clearTimeout(dataTimer); dataTimer = setTimeout(() => emit('data'), 150); }
 
 // ---------------------------------------------------------------- yardımcılar
-const TASK_COLS = 'id,no,code,project_id,directorate,section,category,title,description,tags,status,priority,progress,assignee_id,start_date,due_date,due_time,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,reference_links,completed_at,version,deleted_at,created_at,updated_at,created_by,updated_by';
+const TASK_COLS = 'id,no,code,project_id,directorate,section,task_class,co_assignee_ids,category,title,description,tags,status,priority,progress,assignee_id,start_date,due_date,due_time,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,reference_links,completed_at,version,deleted_at,created_at,updated_at,created_by,updated_by';
 
 function isNetErr(e) {
   if (!navigator.onLine) return true;
@@ -238,7 +238,7 @@ export function hasPending(id, field) {
 export async function createTask(values) {
   const maxNo = Math.max(0, ...[...store.tasks.values()].map((t) => t.no || 0));
   const row = {
-    id: crypto.randomUUID(), no: maxNo + 1, status: 'todo', priority: 'medium', progress: 0, quantity: 1,
+    id: crypto.randomUUID(), no: maxNo + 1, status: 'todo', priority: 'medium', progress: 0, quantity: 1, co_assignee_ids: [],
     tags: [], reference_links: [], recurrence: 'once', reminder: 'none', due_time: '09:00:00', version: 1,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...values,
   };

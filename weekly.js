@@ -18,7 +18,7 @@ export async function render(root, ctx) {
   let occ = [];
 
   const projectName = (id) => store.projects.find((p) => p.id === id)?.name || '';
-  const mine = (x) => !onlyMine || x.assignee_id === ctx.profile.id;
+  const mine = (x) => !onlyMine || x.assignee_id === ctx.profile.id || (x.co_assignee_ids || []).includes(ctx.profile.id);
 
   function list(items, emptyText, dateOf) {
     if (!items.length) return h('p', { class: 'muted small pad0' }, emptyText);

@@ -34,7 +34,7 @@ export function planView(state, ctx, { save, draw, mobile }) {
   // Planlanacak işler: kişinin açık görevleri (gecikenler, yakın tarihliler, öncelikliler önce)
   const rank = { urgent: 0, high: 1, medium: 2, low: 3 };
   const pool = [...store.tasks.values()]
-    .filter((x) => x.assignee_id === person && !['done', 'cancelled'].includes(x.status))
+    .filter((x) => (x.assignee_id === person || (x.co_assignee_ids || []).includes(person)) && !['done', 'cancelled'].includes(x.status))
     .sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')) || rank[a.priority] - rank[b.priority]);
   const est = (x) => Math.min(240, Math.max(SNAP, Number(x.estimate_minutes) || 60));
 

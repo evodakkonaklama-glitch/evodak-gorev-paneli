@@ -474,6 +474,42 @@ JWT ayarlarına dokunmayın (kapalı kalmalı).
 
 ---
 
+## PAKET 10 – Birden çok sorumlu, Sınıf, proje adlarının güncellenmesi
+
+Bir görevin artık **ana sorumlusu** ve **ek sorumluları** olabilir (Excel'de "Hakan / Gamze"). Ek sorumlular hatırlatma, yorum bildirimi, günlük ve haftalık özet alır; Google Tasks'ta görev her sorumlunun listesine düşer. Yeni **Sınıf** alanı (Sosyal Medya, Web, Planlama…) eklendi. Excel içe aktarmada adı değişmiş projeler, aynı kod önekiyle eşlenip yeni adını alır.
+
+### A. Supabase: SQL
+1. https://supabase.com/dashboard/project/znmeghdcyrarfpkuxtvp/sql/new
+2. `011_coklu_sorumlu.sql` dosyasının tamamını yapıştırın → **Run** → "Success" yazmalı.
+
+### B. Supabase: üç fonksiyonu güncelleyin
+**Edge Functions →** ad **→ Code** → içindekini silin → ilgili `.txt` içeriğini yapıştırın → **Deploy updates**:
+1. `send-reminders` ← `send-reminders-kodu.txt`
+2. `google-tasks` ← `google-tasks-kodu.txt`
+3. `maintenance` ← `maintenance-kodu.txt`
+
+### C. GitHub
+`evodak-gorev-paneli-paket10.zip` içindeki **tüm dosyaları** yükleyin (**Add file → Upload files → Commit changes**). Yeni dosya: `011_coklu_sorumlu.sql`. Panelde **Yenile**'ye basın; Ayarlar'da sürüm **10.0** görünmeli.
+
+### D. Yeni Excel'i yükleyin
+**Ayarlar → Veri ve yedek → Excel içe aktar** → `ERA_Gorev_Takip_Paneller_1.xlsx`. Önizlemede: **Eklenecek 331**, **Güncellenecek 3265**, **Hatalı 0**, **Çoklu sorumlu 134**, **Adı değişecek projeler (20)**. "Şablonları yeniden oluştur" kutusunun işaretini kaldırın → **3596 görevi içe aktar**.
+
+### E. Deneyin
+- Görev detayında **Sorumlu** altında **Ek sorumlular** kutucukları; **Sınıf** alanı.
+- Görevler listesinde "Hakan / Gamze" birlikte görünür; **Bana atanan** ek sorumlulukları da sayar.
+- **Filtre → Sınıf**; **Grupla → Sınıf**.
+- Toplu işlemde **Ek sorumlu ekle** (ve "Ek sorumluları kaldır").
+- Projeler: 20 proje yeni adında (ör. "İş Takip & Görev Paneli"); görevi kalmayan *Evodak Birim İşleri* arşivde. Türünü düzeltmek isterseniz kalem simgesi (ör. *Evodak Portal & CRM Paneli* Web görünüyorsa Panel yapın).
+- **Excel'e aktar**: Sınıf sütunu eklendi, Sorumlu "Hakan / Gamze" biçiminde.
+
+### Bilmeniz gerekenler
+- Excel'de ilk yazılan kişi **ana sorumlu**, diğerleri ek sorumludur.
+- Üye (member) rolündeki ek sorumlu görevi düzenleyebilir ama sorumlu listesini değiştiremez.
+- Eski #1–#600 görevlere dokunulmaz; bulundukları proje yeni adını alır.
+- **Geri al** görevleri ve arşivlenen projeleri eski haline getirir; proje adları yeni haliyle kalır (kalem simgesiyle değiştirilebilir).
+
+---
+
 ## Günlük kullanım (kısa)
 
 | Ne yapmak istiyorsunuz? | Nerede? |
@@ -481,7 +517,7 @@ JWT ayarlarına dokunmayın (kapalı kalmalı).
 | Bugün ne var, ne gecikti, öncelikli işler | **Bugün** |
 | Direktörlük / proje / kişi bazında durum ve iş yükü (saat) | **Özet** |
 | Geçen hafta / bu hafta | **Bugün → Haftalık özet** |
-| Görev aramak (ID ile de), filtrelemek, gruplamak, Kanban, toplu atama | **Görevler** |
+| Görev aramak (ID ile de), filtrelemek (Sınıf dahil), gruplamak, Kanban, toplu atama ve ek sorumlu | **Görevler** |
 | Tarihe göre görmek, tarih sürüklemek | **Takvim** (Gün / Hafta / Ay) |
 | Proje zaman çizelgesi | **Takvim → Gantt** |
 | Günü saat saat planlamak | **Takvim → Plan** |

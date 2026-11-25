@@ -8,7 +8,7 @@ export const BIRIM_PREFIX = 'BRM';
 
 // ERA biçiminin 25 sütunu + panelin ek sütunları (isteğe bağlı)
 export const ERA_COLUMNS = [
-  'ID', 'Direktörlük / Birim', 'Alt Birim', 'Proje', 'Görev / Fonksiyon', 'Görev Detayı / Açıklama', 'Sorumlu',
+  'ID', 'Direktörlük / Birim', 'Alt Birim', 'Proje', 'Sınıf', 'Görev / Fonksiyon', 'Görev Detayı / Açıklama', 'Sorumlu',
   'Öncelik', 'Başlangıç', 'Termin', 'Bitiş (Gerçekleşen)', 'Durum', 'İlerleme %', 'Kalan Gün', 'Termin Durumu',
   'Tekrar Tipi', 'Süre (dk)', 'Adet', 'Günde', 'Haftada', 'Ayda', 'Yılda', 'Yıllık Tekrar', 'Toplam Saat (yıllık)', 'Notlar',
 ];
@@ -106,10 +106,18 @@ export function label(kind, code, lang = 'tr') {
 export function projectTypeFromName(name) {
   const n = norm(name);
   if (n === norm(BIRIM_PROJECT) || n.includes('birim iş')) return 'birim';
-  if (n.includes('program')) return 'program';
+  if (n.includes('program') || n.includes('property man')) return 'program';
   if (n.includes('web')) return 'web';
-  if (n.includes('panel')) return 'panel';
+  if (n.includes('panel') || n.includes('portal') || n.includes('prompt')) return 'panel';
   return 'is_plani';
+}
+
+// "Hakan / Gamze", "Hakan, Gamze", "Hakan ve Gamze" -> ['Hakan', 'Gamze']
+export function splitPeople(v) {
+  const out = [];
+  String(v ?? '').split(/\s*(?:\/|,|;|\+|&|\sve\s)\s*/).map((x) => x.trim()).filter(Boolean)
+    .forEach((x) => { if (!out.some((y) => norm(y) === norm(x))) out.push(x); });
+  return out;
 }
 
 // Doğal sıralama: GTP-2 < GTP-10, PAZ-01.02 < PAZ-01.10
@@ -435,7 +443,7 @@ function parseEra(XLSX, wb, { existingPeople = [], fileName = '' } = {}) {
   const hr = rows.slice(0, 15).findIndex((row) => (row || []).some((c) => norm(c) === norm('ID')));
   if (hr < 0) return { fatal: 'err.missing_columns', fatalValue: 'ID' };
   const idx = headerIndex(rows[hr]);
-  const missing = ['ID', 'Direktörlük / Birim', 'Alt Birim', 'Görev Detayı / Açıklama'].filter((c) => idx[norm(c)] === undefined);
+  const missing = ['ID', 'Alt Birim', 'Görev Detayı / Açıklama'].filter((c) => idx[norm(c)] === undefined);
   if (missing.length) return { fatal: 'err.missing_columns', fatalValue: missing.join(', ') };
   const has = (h) => idx[norm(h)] !== undefined;
   const g = (row, h) => { const i = idx[norm(h)]; return i === undefined ? null : row?.[i]; };
@@ -465,7 +473,7 @@ function parseEra(XLSX, wb, { existingPeople = [], fileName = '' } = {}) {
     const section = str(g(row, 'Alt Birim'));
     const title = str(g(row, 'Görev Detayı / Açıklama'));
     if (!title) { fail('err.title_empty'); continue; }
-    if (!directorate) { fail('err.directorate_empty'); continue; }
+    // Direktörlük boş olabilir (eski görevler ve henüz sınıflandırılmamış işler)
     if (!section) { fail('err.section_empty'); continue; }
 
     const status = str(g(row, 'Durum')) ? toCode('status', g(row, 'Durum')) : DEFAULTS.status;
@@ -479,7 +487,7 @@ function parseEra(XLSX, wb, { existingPeople = [], fileName = '' } = {}) {
     if (start === undefined) { fail('err.start_date', str(g(row, 'Başlangıç'))); continue; }
     const due = parseDateCell(g(row, 'Termin'));
     if (due === undefined) { fail('err.due_date', str(g(row, 'Termin'))); continue; }
-    if (start && due && due.date < start.date) { fail('err.due_before_start'); continue; }
+    if (recurrence === 'once' && start && due && due.date < start.date) { fail('err.due_before_start'); continue; }
     const doneAt = parseDateCell(g(row, 'Bitiş (Gerçekleşen)'));
     if (doneAt === undefined) { fail('err.done_date', str(g(row, 'Bitiş (Gerçekleşen)'))); continue; }
 
@@ -515,8 +523,10 @@ function parseEra(XLSX, wb, { existingPeople = [], fileName = '' } = {}) {
       }
     }
 
-    const assignee = str(g(row, 'Sorumlu'));
-    if (assignee && !knows(assignee)) unknownPeople.add(assignee);
+    // Sorumlu: ilk yazılan ana sorumlu, diğerleri ek sorumlu ("Hakan / Gamze")
+    const names = splitPeople(g(row, 'Sorumlu'));
+    names.forEach((n) => { if (!knows(n)) unknownPeople.add(n); });
+    const assignee = names[0] || '';
 
     const task = {
       _row: excelRow,
@@ -525,6 +535,7 @@ function parseEra(XLSX, wb, { existingPeople = [], fileName = '' } = {}) {
       category: str(g(row, 'Görev / Fonksiyon')),
       title,
       description: notes,
+      co_assignees: names.slice(1),
       status, priority, progress,
       assignee,
       start_date: start ? start.date : null,
@@ -540,6 +551,7 @@ function parseEra(XLSX, wb, { existingPeople = [], fileName = '' } = {}) {
       if (!rem) { fail('err.reminder', str(g(row, 'Hatırlatma'))); continue; }
       task.reminder = rem;
     }
+    if (has('Sınıf')) task.task_class = str(g(row, 'Sınıf'));
     if (has('Etiketler')) task.tags = splitList(g(row, 'Etiketler'));
     if (has('Referans')) task.reference_links = splitRefs(g(row, 'Referans'));
     if (has('Kontrol Listesi')) {
@@ -665,13 +677,30 @@ function finishParsed({ format, fileName, tasks, people, lists, errors, warnings
   const projectNames = [...lists.projects];
   for (const tk of tasks) if (!projectNames.some((p) => norm(p) === norm(tk.project))) projectNames.push(tk.project);
   for (const tk of tasks) tk.project = projectNames.find((p) => norm(p) === norm(tk.project));
+  // Kod öneki: projedeki görev kodlarında en çok geçen önek (ör. GTP-001 -> GTP).
+  // Bir önek yalnızca bir projeye verilir: en çok görevi taşıyan proje alır. Panelde aynı önekli proje varsa
+  // içe aktarmada o proje bu yeni adı alır (proje adı değişmiş sayılır).
+  const prefixCount = new Map();
+  for (const x of tasks) {
+    const pre = (x.code.match(/^([A-Za-zÇĞİÖŞÜçğıöşü]{2,4})-\d+$/) || [])[1]?.toLocaleUpperCase('tr');
+    if (!pre) continue;
+    const k = `${x.project}\u0000${pre}`;
+    prefixCount.set(k, (prefixCount.get(k) || 0) + 1);
+  }
+  const majority = new Map();
+  for (const [k, n] of prefixCount) {
+    const [proj, pre] = k.split('\u0000');
+    if (!majority.has(proj) || majority.get(proj).n < n) majority.set(proj, { pre, n });
+  }
+  const prefixOf = new Map();
+  const claimed = new Set();
+  [...majority.entries()].sort((a, b) => b[1].n - a[1].n).forEach(([proj, { pre }]) => {
+    if (!claimed.has(pre)) { claimed.add(pre); prefixOf.set(proj, pre); }
+  });
   const projects = projectNames.map((name, i) => {
     const type = projectTypeFromName(name);
-    // Kod öneki: projedeki görev kodlarının ortak öneki (ör. GTP-001 -> GTP)
-    const prefixes = new Set(tasks.filter((x) => x.project === name)
-      .map((x) => (x.code.match(/^([A-Za-zÇĞİÖŞÜçğıöşü]{2,4})-\d+$/) || [])[1]?.toLocaleUpperCase('tr')));
-    let code_prefix = prefixes.size === 1 ? [...prefixes][0] || null : null;
-    if (type === 'birim') code_prefix = BIRIM_PREFIX;
+    let code_prefix = prefixOf.get(name) || null;
+    if (type === 'birim' && !code_prefix) code_prefix = BIRIM_PREFIX;
     return { name, type, sort_order: i + 1, code_prefix };
   });
 
@@ -743,8 +772,8 @@ export function buildTemplates(tasks, projects) {
 }
 
 // ---------- Önizleme: veritabanındaki görevlerle karşılaştırma ----------
-const COMPARE_FIELDS = ['project', 'directorate', 'section', 'category', 'title', 'description', 'tags', 'status',
-  'priority', 'progress', 'assignee', 'start_date', 'due_date', 'estimate_minutes', 'quantity', 'recurrence',
+const COMPARE_FIELDS = ['project', 'directorate', 'section', 'category', 'task_class', 'title', 'description', 'tags', 'status',
+  'priority', 'progress', 'assignee', 'co_assignees', 'start_date', 'due_date', 'estimate_minutes', 'quantity', 'recurrence',
   'freq_count', 'recurrence_day', 'reminder', 'reference_links', 'checklist'];
 
 function comparable(t, field) {
@@ -771,6 +800,10 @@ export function diffWithExisting(parsed, existing, matchesPerson = (a, b) => nor
       if (f === 'due_date' && !tk.due_date && tk.recurrence !== 'once') return false;
       if (f === 'progress' && !['in_progress', 'waiting'].includes(tk.status)) return false;
       if (f === 'assignee') return !(tk.assignee ? matchesPerson(tk.assignee, e.assignee) : !e.assignee);
+      if (f === 'co_assignees') {
+        const a = tk.co_assignees || []; const b = e.co_assignees || [];
+        return a.length !== b.length || !a.every((n) => b.some((m) => matchesPerson(n, m)));
+      }
       return comparable(tk, f) !== comparable(e, f);
     });
     if (e.deleted) changed.push('restore');
@@ -799,8 +832,8 @@ export function buildPayloadChunks(parsed, diff, size = 500) {
 
 // ---------- Dışa aktarma: ERA biçimi (25 sütun + ek sütunlar, Listeler, Özet Panel) ----------
 // data = { tasks, projects, profiles, checklist: Map(taskId -> [madde]), lookups }
-export const DATE_COLS = [8, 9, 10];       // Başlangıç, Termin, Bitiş (0 tabanlı)
-export const PERCENT_COL = 12;              // İlerleme %
+export const DATE_COLS = [9, 10, 11];      // Başlangıç, Termin, Bitiş (0 tabanlı)
+export const PERCENT_COL = 13;              // İlerleme %
 export const HEADER_ROW = 3;                // 0 tabanlı: 4. satır
 
 export function buildExportSheets(data, { today = todayIso() } = {}) {
@@ -816,8 +849,9 @@ export function buildExportSheets(data, { today = todayIso() } = {}) {
     const ds = dueState(tk, today);
     const prj = projects.get(tk.project_id)?.name || '';
     return [
-      tk.code, tk.directorate || '', tk.section || '', prj === BIRIM_PROJECT ? '' : prj, tk.category || '', tk.title,
-      people.get(tk.assignee_id)?.full_name || '', label('priority', tk.priority),
+      tk.code, tk.directorate || '', tk.section || '', prj === BIRIM_PROJECT ? '' : prj, tk.task_class || '', tk.category || '', tk.title,
+      [tk.assignee_id, ...(tk.co_assignee_ids || [])].map((id) => people.get(id)?.full_name).filter(Boolean).join(' / '),
+      label('priority', tk.priority),
       isoToSerial(tk.start_date), isoToSerial(tk.due_date),
       tk.status === 'done' && tk.completed_at ? isoToSerial(new Date(tk.completed_at).toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' })) : null,
       label('status', tk.status), (tk.progress || 0) / 100,
@@ -833,7 +867,7 @@ export function buildExportSheets(data, { today = todayIso() } = {}) {
   const counts = summarize(tasks, { today });
   const head = [
     ['Evodak Gayrimenkul Yönetimi — Görev Takip'],
-    [`Panelden dışa aktarıldı: ${formatDateTR(today)} · ${tasks.length} görev. Gri sütunlar (Kalan Gün, Termin Durumu, Yıllık Tekrar, Toplam Saat) paneldeki hesaplamadır. Z–AD sütunları panelin ek bilgileridir; dosya panele geri yüklenebilir.`],
+    [`Panelden dışa aktarıldı: ${formatDateTR(today)} · ${tasks.length} görev. Gri sütunlar (Kalan Gün, Termin Durumu, Yıllık Tekrar, Toplam Saat) paneldeki hesaplamadır. AA–AE sütunları panelin ek bilgileridir; dosya panele geri yüklenebilir.`],
     [`Toplam ${tasks.length} · Devam eden ${counts.totals.in_progress} · Tamamlanan ${counts.totals.done} · Gecikmiş ${counts.totals.overdue} · Termini yaklaşan ${counts.totals.soon}`],
     [...ERA_COLUMNS, ...EXTRA_COLUMNS],
   ];

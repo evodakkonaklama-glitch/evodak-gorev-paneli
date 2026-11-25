@@ -78,7 +78,7 @@ async function handleFile(page, file) {
   try {
     const [profiles, projects, tplCount] = await Promise.all([
       fetchAll(() => supabase.from('profiles').select('id,full_name,email').order('full_name')),
-      fetchAll(() => supabase.from('projects').select('id,name').order('sort_order')),
+      fetchAll(() => supabase.from('projects').select('id,name,code_prefix,archived').order('sort_order')),
       supabase.from('task_templates').select('id', { count: 'exact', head: true }),
     ]);
     const parsed = parseWorkbook(window.XLSX, wb, { existingPeople: profiles.map((p) => p.full_name), fileName: file.name });
@@ -101,7 +101,7 @@ async function loadExisting(projects, profiles) {
   const personName = new Map(profiles.map((p) => [p.id, p.full_name]));
   const [tasks, items] = await Promise.all([
     fetchAll(() => supabase.from('tasks')
-      .select('id,no,code,project_id,directorate,section,category,title,description,tags,status,priority,progress,assignee_id,start_date,due_date,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,reference_links,deleted_at')
+      .select('id,no,code,project_id,directorate,section,category,task_class,title,description,tags,status,priority,progress,assignee_id,co_assignee_ids,start_date,due_date,estimate_minutes,quantity,recurrence,freq_count,recurrence_day,reminder,reference_links,deleted_at')
       .order('no')),
     fetchAll(() => supabase.from('checklist_items').select('task_id,text,note,done,sort_order').order('task_id').order('sort_order')),
   ]);
@@ -114,6 +114,7 @@ async function loadExisting(projects, profiles) {
     ...tk,
     project: projectName.get(tk.project_id) || '',
     assignee: tk.assignee_id ? personName.get(tk.assignee_id) || '' : '',
+    co_assignees: (tk.co_assignee_ids || []).map((id) => personName.get(id)).filter(Boolean),
     checklist: itemsByTask.get(tk.id) || [],
     deleted: Boolean(tk.deleted_at),
   }));
@@ -150,7 +151,15 @@ function showPreview(page, parsed, diff, { profiles, projects, templatesExist })
   clear(page);
   const writeCount = diff.toInsert.length + diff.toUpdate.length;
   const items = [...diff.toInsert, ...diff.toUpdate.map((u) => u.task)].reduce((s, tk) => s + (tk.checklist || []).length, 0);
-  const newProjects = parsed.projects.filter((p) => !projects.some((x) => norm(x.name) === norm(p.name)));
+  // Adı değişecek projeler: dosyadaki ad panelde yok ama aynı kod önekli proje var
+  const fileNames = new Set(parsed.projects.map((p) => norm(p.name)));
+  const renames = parsed.projects.map((p) => {
+    if (projects.some((x) => norm(x.name) === norm(p.name)) || !p.code_prefix) return null;
+    const old = projects.find((x) => (x.code_prefix || '').toLocaleUpperCase('tr') === p.code_prefix && !fileNames.has(norm(x.name)));
+    return old ? { from: old.name, to: p.name } : null;
+  }).filter(Boolean);
+  const newProjects = parsed.projects.filter((p) => !projects.some((x) => norm(x.name) === norm(p.name)) && !renames.some((r) => r.to === p.name));
+  const coCount = parsed.tasks.filter((x) => (x.co_assignees || []).length).length;
   const newPeople = parsed.people.filter((p) => !profiles.some((x) => (p.email && norm(x.email) === norm(p.email)) || norm(x.full_name) === norm(p.full_name))).length;
   const dirCount = parsed.lookups.filter((l) => l.kind === 'directorate').length;
 
@@ -166,8 +175,13 @@ function showPreview(page, parsed, diff, { profiles, projects, templatesExist })
       dirCount ? stat(t('import.directorates'), dirCount) : null,
       stat(t('import.projects'), `${parsed.projects.length}${newProjects.length ? ` (+${newProjects.length})` : ''}`),
       items ? stat(t('import.checklist_items'), items) : null,
+      coCount ? stat(t('import.co_tasks'), coCount) : null,
       parsed.people.length ? stat(t('import.people'), `${parsed.people.length}${newPeople ? ` (+${newPeople})` : ''}`) : null));
 
+  if (renames.length) {
+    page.append(h('details', { class: 'details', open: true }, h('summary', {}, `${t('import.renames')} (${renames.length})`),
+      h('ul', { class: 'plain-list' }, renames.map((r) => h('li', {}, `${r.from} → `, h('strong', {}, r.to))))));
+  }
   if (newProjects.length) {
     page.append(h('details', { class: 'details' }, h('summary', {}, `${t('import.new_projects')} (${newProjects.length})`),
       h('ul', { class: 'plain-list' }, newProjects.map((p) => h('li', {}, `${p.name}${p.code_prefix ? ` · ${p.code_prefix}` : ''}`)))));
@@ -267,7 +281,7 @@ async function save(page, parsed, diff, { replace, templates }) {
 
     // 2) Görevler 500'erli parçalarla (aynı içe aktarma oturumu)
     let batchId = null;
-    let inserted = 0; let updated = 0; let noAssignee = 0;
+    let inserted = 0; let updated = 0; let noAssignee = 0; let renamed = 0;
     for (let i = 0; i < chunks.length; i++) {
       set(step, steps, t('import.step_chunk', { i: i + 1, n: chunks.length }));
       const { data, error } = await supabase.rpc('import_excel', { p: { ...chunks[i], batch_id: batchId } });
@@ -276,7 +290,7 @@ async function save(page, parsed, diff, { replace, templates }) {
         throw error;
       }
       batchId = data.batch_id;
-      inserted += data.inserted; updated += data.updated; noAssignee += data.no_assignee || 0;
+      inserted += data.inserted; updated += data.updated; noAssignee += data.no_assignee || 0; renamed += (data.renamed || []).length;
       step++;
     }
 
@@ -300,7 +314,8 @@ async function save(page, parsed, diff, { replace, templates }) {
       step++;
     }
 
-    await supabase.rpc('import_finish', { p_batch: batchId });
+    const fin = await supabase.rpc('import_finish', { p_batch: batchId });
+    const archived = (fin.data?.archived_projects || []).length;
     set(steps, steps, t('import.step_reload'));
     await reloadAll();
 
@@ -311,6 +326,8 @@ async function save(page, parsed, diff, { replace, templates }) {
         h('p', {}, t('import.done_body', { ins: inserted, upd: updated })),
         trashed ? h('p', {}, t('import.done_trashed', { n: trashed })) : null,
         tplCount ? h('p', {}, t('import.done_templates', { n: tplCount })) : null,
+        renamed ? h('p', {}, t('import.done_renamed', { n: renamed })) : null,
+        archived ? h('p', {}, t('import.done_archived', { n: archived })) : null,
         noAssignee ? h('p', { class: 'tone-amber-text' }, t('import.done_no_assignee', { n: noAssignee })) : null,
         h('div', { class: 'actions' },
           h('button', { class: 'btn', type: 'button', onclick: () => undo(page, batchId) }, t('import.undo')),

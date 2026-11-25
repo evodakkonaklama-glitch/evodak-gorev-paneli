@@ -6,7 +6,7 @@ import { buildExportSheets, SHEETS, DATE_COLS, PERCENT_COL, HEADER_ROW } from '.
 import { store } from './store.js';
 
 // ERA dosyasındaki sütun genişlikleri + ek sütunlar
-const WIDTHS = [11, 22, 22, 30, 20, 50, 14, 9, 11, 11, 11, 12, 9, 8, 16, 11, 8, 6, 6, 7, 6, 6, 9, 9, 40, 14, 18, 16, 30, 40];
+const WIDTHS = [11, 22, 22, 30, 16, 20, 50, 16, 9, 11, 11, 11, 12, 9, 8, 16, 11, 8, 6, 6, 7, 6, 6, 9, 9, 40, 14, 18, 16, 30, 40];
 
 export function buildWorkbook(XLSX, tasks) {
   const sheets = buildExportSheets({

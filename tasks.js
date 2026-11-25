@@ -16,7 +16,7 @@ const PRIORITY_ICON = { urgent: 'alert', high: 'arrowUp', medium: 'minus', low: 
 const KANBAN_LIMIT = 60;
 const PAGE = 100;
 const STATE_KEY = 'evodak.taskView';
-const FILTER_KEYS = ['directorate', 'project', 'section', 'category', 'status', 'priority', 'assignee', 'recurrence', 'due', 'tag', 'from', 'to'];
+const FILTER_KEYS = ['directorate', 'project', 'section', 'task_class', 'category', 'status', 'priority', 'assignee', 'recurrence', 'due', 'tag', 'from', 'to'];
 
 const DEFAULT_STATE = { view: 'list', quick: 'all', q: '', group: '', sort: 'code', dir: 1, filtersOpen: false,
   ...Object.fromEntries(FILTER_KEYS.map((k) => [k, ''])) };
@@ -54,8 +54,16 @@ function dueCell(task) {
     info ? h('span', { class: `due-tag due-${info.tone}` }, info.tone === 'overdue' ? icon('alert') : icon('clock'), info.text) : null);
 }
 
+// Görev bu kişinin mi? (ana veya ek sorumlu)
+export function isMine(task, profileId) {
+  return Boolean(profileId) && (task.assignee_id === profileId || (task.co_assignee_ids || []).includes(profileId));
+}
+// Görevin tüm sorumluları (ana sorumlu önce)
+export function assigneeIds(task) {
+  return [task.assignee_id, ...(task.co_assignee_ids || [])].filter(Boolean);
+}
 export function canEdit(ctx, task) {
-  return ctx.isAdmin || (ctx.profile.role === 'member' && task.assignee_id === ctx.profile.id);
+  return ctx.isAdmin || (ctx.profile.role === 'member' && isMine(task, ctx.profile.id));
 }
 
 // Gecikme yalnızca tek seferlik görevler için (tekrarlayan rutinler Bugün → tekrarlananlar'da)
@@ -69,8 +77,8 @@ function quickMatch(tk, quick, ctx, today, now) {
     case 'today': return tk.due_date === today;
     case 'overdue': return isOverdue(tk, now);
     case 'soon': return dueState(tk, today) === 'soon';
-    case 'mine': return tk.assignee_id === ctx.profile.id;
-    case 'unassigned': return !tk.assignee_id && !['done', 'cancelled'].includes(tk.status);
+    case 'mine': return isMine(tk, ctx.profile.id);
+    case 'unassigned': return !assigneeIds(tk).length && !['done', 'cancelled'].includes(tk.status);
     case 'done': return tk.status === 'done';
     default: return true;
   }
@@ -87,7 +95,8 @@ function applyFilters(tasks, ctx) {
     && (!state.category || tk.category === state.category)
     && (!state.status || tk.status === state.status)
     && (!state.priority || tk.priority === state.priority)
-    && (!state.assignee || (state.assignee === '-' ? !tk.assignee_id : tk.assignee_id === state.assignee))
+    && (!state.assignee || (state.assignee === '-' ? !assigneeIds(tk).length : isMine(tk, state.assignee)))
+    && (!state.task_class || tk.task_class === state.task_class)
     && (!state.recurrence || tk.recurrence === state.recurrence)
     && (!state.due || (state.due === '-' ? !dueState(tk, today) : dueState(tk, today) === state.due))
     && (!state.tag || (tk.tags || []).includes(state.tag))
@@ -152,7 +161,7 @@ export async function render(root, ctx) {
       tk._project = projects.get(tk.project_id)?.name || '';
       tk._titleKey = searchFold(tk.title);
       tk._dirKey = searchFold(tk.directorate || '');
-      tk._search = searchFold([tk.code, tk.title, tk.description, tk._project, tk.directorate, tk.section, tk.category, (tk.tags || []).join(' ')].join(' '));
+      tk._search = searchFold([tk.code, tk.title, tk.description, tk._project, tk.directorate, tk.section, tk.task_class, tk.category, (tk.tags || []).join(' ')].join(' '));
     }
   }
 
@@ -239,6 +248,7 @@ export async function render(root, ctx) {
     const scoped = state.directorate ? all.filter((x) => x.directorate === state.directorate) : all;
     const sections = uniq([...(state.directorate ? [] : lookups('section')), ...scoped.map((x) => x.section)]);
     const categories = uniq(scoped.map((x) => x.category)).sort((a, b) => a.localeCompare(b, 'tr'));
+    const classes = uniq(scoped.map((x) => x.task_class)).sort((a, b) => a.localeCompare(b, 'tr'));
     const tags = uniq(all.flatMap((x) => x.tags || [])).sort((a, b) => a.localeCompare(b, 'tr'));
     const dirSel = select('directorate', t('field.directorate'), [['-', t('tasks.none')], ...dirs.map((s) => [s, s])]);
     dirSel.querySelector('select').addEventListener('change', () => { state.section = ''; state.category = ''; saveState(); drawFilters(); });
@@ -247,6 +257,7 @@ export async function render(root, ctx) {
         dirSel,
         select('section', t('tasks.section'), sections.map((s) => [s, s])),
         select('project', t('tasks.col_project'), store.projects.filter((p) => !p.archived).map((p) => [p.id, p.name])),
+        classes.length ? select('task_class', t('field.task_class'), classes.map((s) => [s, s])) : null,
         select('category', t('tasks.category'), categories.map((s) => [s, s])),
         select('status', t('tasks.col_status'), STATUS_ORDER.map((s) => [s, label('status', s, lang)])),
         select('priority', t('tasks.col_priority'), PRIORITY_ORDER.map((s) => [s, label('priority', s, lang)])),
@@ -256,7 +267,7 @@ export async function render(root, ctx) {
         select('tag', t('tasks.tags'), tags.map((s) => [s, s])),
         dateInput('from', t('tasks.due_from')),
         dateInput('to', t('tasks.due_to')),
-        select('group', t('tasks.group'), [['', t('tasks.group_none')], ['directorate', t('field.directorate')], ['project', t('tasks.col_project')], ['category', t('tasks.category')]], { any: null })),
+        select('group', t('tasks.group'), [['', t('tasks.group_none')], ['directorate', t('field.directorate')], ['project', t('tasks.col_project')], ['task_class', t('field.task_class')], ['category', t('tasks.category')]], { any: null })),
       h('div', { class: 'row-wrap' }, h('button', { class: 'btn btn-link', type: 'button', onclick: () => {
         FILTER_KEYS.forEach((k) => { state[k] = ''; });
         limit = PAGE; saveState(); drawFilters(); draw();
@@ -320,6 +331,7 @@ export async function render(root, ctx) {
     };
     const fields = [
       sel('assignee_id', t('tasks.assignee'), [['', t('tasks.unassigned')], ...store.profiles.filter((p) => p.active !== false).map((p) => [p.id, p.full_name])]),
+      sel('add_co_assignee', t('bulk.add_co'), [...store.profiles.filter((p) => p.active !== false).map((p) => [p.id, p.full_name]), ['__clear', t('bulk.clear_co')]]),
       sel('priority', t('tasks.col_priority'), PRIORITY_ORDER.map((s) => [s, label('priority', s, lang)])),
       sel('status', t('tasks.col_status'), STATUS_ORDER.map((s) => [s, label('status', s, lang)])),
       sel('reminder', t('field.reminder'), Object.keys(VALUE_LABELS.reminder).map((s) => [s, label('reminder', s, lang)])),
@@ -328,7 +340,11 @@ export async function render(root, ctx) {
     const apply = h('button', { class: 'btn btn-primary btn-sm', type: 'button' }, t('bulk.apply'));
     apply.addEventListener('click', async () => {
       const patch = {};
-      fields.forEach((f) => { if (f.value !== '__') patch[f.dataset.key] = f.value; });
+      fields.forEach((f) => {
+        if (f.value === '__') return;
+        if (f.dataset.key === 'add_co_assignee' && f.value === '__clear') patch.clear_co_assignees = true;
+        else patch[f.dataset.key] = f.value;
+      });
       if (due.value) patch.due_date = due.value;
       if (!Object.keys(patch).length) { toast(t('bulk.pick'), { type: 'error' }); return; }
       const ok = await confirmDialog(t('bulk.confirm', { n: selected.size }), { confirmLabel: t('bulk.apply') });
@@ -364,6 +380,7 @@ export async function render(root, ctx) {
     if (state.group === 'directorate') return tk.directorate || t('tasks.none');
     if (state.group === 'project') return tk._project || t('tasks.none');
     if (state.group === 'category') return tk.category || t('tasks.none');
+    if (state.group === 'task_class') return tk.task_class || t('tasks.none');
     return '';
   }
 
@@ -380,7 +397,7 @@ export async function render(root, ctx) {
         h('a', { class: 'row-link', href: `#/gorev/${tk.id}` }, tk.title),
         h('div', { class: 'sub muted' }, [tk.directorate, tk.section, tk.category].filter(Boolean).join(' · '),
           c.total ? h('span', { class: 'chip' }, icon('check', 'icon-sm'), `${c.done}/${c.total}`) : null,
-          tk.assignee_id ? h('span', { class: 'chip' }, people.get(tk.assignee_id) || '') : null,
+          assigneeIds(tk).length ? h('span', { class: 'chip' }, assigneeIds(tk).map((id) => people.get(id) || '?').join(' / ')) : null,
           ds && ds !== 'overdue' && !dueInfo(tk) ? h('span', { class: `due-state ds-${ds}` }, DUE_STATE_LABELS[ds][getLang() === 'en' ? 1 : 0]) : null)),
       h('td', { class: 'c-project' }, tk._project),
       h('td', { class: 'c-status' }, statusBadge(tk.status)),

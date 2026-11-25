@@ -28,7 +28,7 @@ export function ganttView(state, ctx, { save, draw }) {
 
   const all = [...store.tasks.values()].filter((x) => x.status !== 'cancelled'
     && (!state.project || x.project_id === state.project)
-    && (!state.gmine || x.assignee_id === ctx.profile.id));
+    && (!state.gmine || x.assignee_id === ctx.profile.id || (x.co_assignee_ids || []).includes(ctx.profile.id)));
   const dated = all.filter((x) => x.start_date || x.due_date);
   const undated = all.length - dated.length;
   const span = (x) => {

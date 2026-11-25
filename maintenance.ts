@@ -81,7 +81,7 @@ const L = {
   reminder: { none: 'Yok', at_time: 'Tam zamanında', '15m': '15 dk önce', '1h': '1 saat önce', '1d': '1 gün önce', '1w': '1 hafta önce' },
   weekday: { mon: 'Pazartesi', tue: 'Salı', wed: 'Çarşamba', thu: 'Perşembe', fri: 'Cuma', sat: 'Cumartesi', sun: 'Pazar' },
 } as Record<string, Record<string, string>>;
-const ERA_HEAD = ['ID', 'Direktörlük / Birim', 'Alt Birim', 'Proje', 'Görev / Fonksiyon', 'Görev Detayı / Açıklama', 'Sorumlu',
+const ERA_HEAD = ['ID', 'Direktörlük / Birim', 'Alt Birim', 'Proje', 'Sınıf', 'Görev / Fonksiyon', 'Görev Detayı / Açıklama', 'Sorumlu',
   'Öncelik', 'Başlangıç', 'Termin', 'Bitiş (Gerçekleşen)', 'Durum', 'İlerleme %', 'Kalan Gün', 'Termin Durumu',
   'Tekrar Tipi', 'Süre (dk)', 'Adet', 'Günde', 'Haftada', 'Ayda', 'Yılda', 'Yıllık Tekrar', 'Toplam Saat (yıllık)', 'Notlar',
   'Hatırlatma', 'Tekrar Günü', 'Etiketler', 'Referans', 'Kontrol Listesi'];
@@ -125,8 +125,8 @@ function buildWorkbook(d: Record<string, any[]>) {
     const state = !t.due_date || !open ? '-' : left! < 0 ? 'Gecikmiş' : left! <= 7 ? 'Yaklaşıyor (≤7 gün)' : 'Takvimde';
     const yr = yearlyRepeat(t);
     const prj = projects.get(t.project_id)?.name ?? '';
-    return [t.code ?? `#${t.no}`, t.directorate ?? '', t.section ?? '', prj === BIRIM_PROJECT ? '' : prj, t.category ?? '', t.title,
-      people.get(t.assignee_id)?.full_name ?? '', L.priority[t.priority], serial(t.start_date), serial(t.due_date),
+    return [t.code ?? `#${t.no}`, t.directorate ?? '', t.section ?? '', prj === BIRIM_PROJECT ? '' : prj, t.task_class ?? '', t.category ?? '', t.title,
+      [t.assignee_id, ...(t.co_assignee_ids ?? [])].map((id: string) => people.get(id)?.full_name).filter(Boolean).join(' / '), L.priority[t.priority], serial(t.start_date), serial(t.due_date),
       t.status === 'done' && t.completed_at ? serial(new Date(new Date(t.completed_at).getTime() + 3 * 3600000).toISOString()) : null,
       L.status[t.status], (t.progress ?? 0) / 100, left, state, L.recurrence[t.recurrence], t.estimate_minutes ?? null, t.quantity ?? 1,
       ...freq, Math.round(yr * 10) / 10, Math.round(((t.estimate_minutes ?? 0) * (t.quantity ?? 1) * yr) / 60 * 10) / 10,
@@ -140,8 +140,8 @@ function buildWorkbook(d: Record<string, any[]>) {
   ];
   const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
   for (let r = 4; r < rows.length + 4; r++) {
-    for (const c of [8, 9, 10]) { const cell = ws[XLSX.utils.encode_cell({ r, c })]; if (cell && cell.t === 'n') cell.z = 'dd.mm.yyyy'; }
-    const p = ws[XLSX.utils.encode_cell({ r, c: 12 })]; if (p && p.t === 'n') p.z = '0%';
+    for (const c of [9, 10, 11]) { const cell = ws[XLSX.utils.encode_cell({ r, c })]; if (cell && cell.t === 'n') cell.z = 'dd.mm.yyyy'; }
+    const p = ws[XLSX.utils.encode_cell({ r, c: 13 })]; if (p && p.t === 'n') p.z = '0%';
   }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Görev Takip');
